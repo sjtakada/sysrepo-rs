@@ -1,0 +1,15 @@
+[package]
+name = "sysrepo"
+version = "0.1.0"
+authors = ["Toshiaki Takada <toshi@reze.rs>"]
+edition = "2018"
+description = "Sysrepo Rust bindings generatedy by bindgen"
+repository = "https://github.com/sjtakada/sysrepo-rs"
+readme = "README.md"
+keywords = ["sysrepo", "libyang", "yang", "netconf"]
+license = "Apache-2.0"
+categories = ["external-ffi-bindings", "network-programming"]
+build = "build.rs"
+
+[build-dependencies]
+bindgen = "0.54.0"
