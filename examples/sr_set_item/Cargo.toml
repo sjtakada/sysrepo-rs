@@ -1,0 +1,8 @@
+[package]
+name = "sr_set_item"
+version = "0.1.0"
+authors = ["Toshiaki Takada <toshi@reze.rs>"]
+edition = "2018"
+
+[dependencies]
+sysrepo = { path = "../.." }

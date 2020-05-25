@@ -13,3 +13,10 @@ build = "build.rs"
 
 [build-dependencies]
 bindgen = "0.54.0"
+
+[workspace]
+members = ["examples/utils", "examples/oper_data",
+           "examples/notif_subscribe", "examples/notif_send",
+           "examples/rpc_subscribe", "examples/rpc_send",
+           "examples/sr_get_items", "examples/sr_set_item",
+           "examples/application_changes"]

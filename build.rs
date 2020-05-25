@@ -7,6 +7,7 @@ fn main() {
     // Tell cargo to tell rustc to link the system sysrepo
     // shared library.
     println!("cargo:rustc-link-lib=sysrepo");
+    println!("cargo:rustc-link-lib=yang");
 
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");

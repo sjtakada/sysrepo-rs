@@ -1,0 +1,10 @@
+[package]
+name = "notif_subscribe"
+version = "0.1.0"
+authors = ["Toshiaki Takada <toshi@reze.rs>"]
+edition = "2018"
+
+[dependencies]
+sysrepo = { path = "../.." }
+utils = { path = "../utils" }
+
