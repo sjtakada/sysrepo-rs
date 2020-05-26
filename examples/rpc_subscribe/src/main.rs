@@ -25,8 +25,8 @@ fn print_help(program: &str) {
 extern "C" fn rpc_cb(
     _session: *mut sr_session_ctx_t,
     path: *const c_char,
-    input: *const sr_val_t,
-    input_cnt: u64,
+    _input: *const sr_val_t,
+    _input_cnt: u64,
     _event: sr_event_t,
     _request_id: u32,
     output: *mut *mut sr_val_t,

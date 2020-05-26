@@ -6,7 +6,6 @@
 use std::env;
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::mem;
 use std::mem::zeroed;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
@@ -87,8 +86,6 @@ fn main() {
         print_help(&program);
         std::process::exit(1);
     }
-
-    let path = args[1].clone();
 
     let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
     let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };

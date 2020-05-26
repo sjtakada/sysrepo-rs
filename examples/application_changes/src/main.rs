@@ -46,7 +46,7 @@ fn print_change(op: sr_change_oper_t, old_val: *mut sr_val_t, new_val: *mut sr_v
                 print_val(new_val);
             }
             sr_change_oper_e_SR_OP_MOVED => {
-                let xpath = unsafe { CStr::from_ptr(new_val.xpath) };
+                let xpath = CStr::from_ptr(new_val.xpath);
                 println!("MOVED: {}", xpath.to_str().unwrap());
             }
             _ => {}
