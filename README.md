@@ -7,7 +7,7 @@ Sysrepo-rs depends on [sysrepo][1] C library, which depdeds on libyang and some 
 
 https://github.com/sysrepo/sysrepo
 
-## Examples
-TBD
+## Note
+This crate is bare minimum auto generated bindings, so most of the function calls to sysrepo are unsafe.  There are some examples available in this repo.
 
 [1]: http://www.sysrepo.org/
