@@ -4,14 +4,17 @@
 //
 
 use std::env;
-use std::mem::zeroed;
 use std::ffi::c_void;
+use std::mem::zeroed;
 
 use sysrepo::*;
 
 /// Show help.
 fn print_help(program: &str) {
-    println!("Usage: {} <notification-path> [<node-to-set> <node-value>]", program);
+    println!(
+        "Usage: {} <notification-path> [<node-to-set> <node-value>]",
+        program
+    );
 }
 
 /// Main.
@@ -35,7 +38,10 @@ fn main() {
     let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
     let mut rc;
 
-    println!(r#"Application will send notification "{}" notification."#, path);
+    println!(
+        r#"Application will send notification "{}" notification."#,
+        path
+    );
 
     // Turn logging on.
     unsafe {
@@ -66,7 +72,7 @@ fn main() {
 
         // Create the notification.
         let notif;
-        unsafe  {
+        unsafe {
             let path_ptr = &path[..] as *const _ as *const i8;
             notif = lyd_new_path(null_ptr as *mut lyd_node, ctx, path_ptr, null_ptr, 0, 0);
             if notif == null_ptr as *mut lyd_node {
@@ -81,7 +87,8 @@ fn main() {
                 let path_ptr = &path[..] as *const _ as *const i8;
                 let val_ptr = &val[..] as *const _ as *mut c_void;
 
-                let ret_node = lyd_new_path(notif, null_ptr as *mut ly_ctx, path_ptr, val_ptr, 0, 0);
+                let ret_node =
+                    lyd_new_path(notif, null_ptr as *mut ly_ctx, path_ptr, val_ptr, 0, 0);
                 if ret_node == null_ptr as *mut lyd_node {
                     println!(r#"Creating value "{}" failed."#, path);
                     break;

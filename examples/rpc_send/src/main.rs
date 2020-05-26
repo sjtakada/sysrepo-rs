@@ -4,16 +4,19 @@
 //
 
 use std::env;
-use std::slice;
-use std::mem::zeroed;
 use std::ffi::c_void;
+use std::mem::zeroed;
+use std::slice;
 
-use utils::print_val;
 use sysrepo::*;
+use utils::print_val;
 
 /// Show help.
 fn print_help(program: &str) {
-    println!("Usage: {} <notification-path> [<node-to-set> <node-value>]", program);
+    println!(
+        "Usage: {} <notification-path> [<node-to-set> <node-value>]",
+        program
+    );
 }
 
 /// Main.
@@ -66,8 +69,15 @@ fn main() {
         unsafe {
             let path = &path[..] as *const _ as *const i8;
 
-            rc = sr_rpc_send(session, path, null_ptr as *const sr_val_t, 0, 0,
-                             &mut output, &mut output_count);
+            rc = sr_rpc_send(
+                session,
+                path,
+                null_ptr as *const sr_val_t,
+                0,
+                0,
+                &mut output,
+                &mut output_count,
+            );
             if rc != sr_error_e_SR_ERR_OK as i32 {
                 break;
             }

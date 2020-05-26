@@ -4,13 +4,13 @@
 //
 
 use std::env;
+use std::ffi::CStr;
+use std::ffi::CString;
 use std::mem;
 use std::mem::zeroed;
 use std::os::raw::c_char;
-use std::ffi::CStr;
-use std::ffi::CString;
-use std::time;
 use std::thread;
+use std::time;
 
 use libc;
 use sysrepo::*;
@@ -22,15 +22,24 @@ fn print_help(program: &str) {
 }
 
 /// Notification callback.
-extern "C" fn rpc_cb(_session: *mut sr_session_ctx_t, path: *const c_char,
-                     input: *const sr_val_t, input_cnt: u64, _event: sr_event_t,
-                     _request_id: u32, output: *mut *mut sr_val_t, output_cnt: *mut u64,
-                     _private_data: *mut ::std::os::raw::c_void) -> i32 {
+extern "C" fn rpc_cb(
+    _session: *mut sr_session_ctx_t,
+    path: *const c_char,
+    input: *const sr_val_t,
+    input_cnt: u64,
+    _event: sr_event_t,
+    _request_id: u32,
+    output: *mut *mut sr_val_t,
+    output_cnt: *mut u64,
+    _private_data: *mut ::std::os::raw::c_void,
+) -> i32 {
     let path: &CStr = unsafe { CStr::from_ptr(path) };
     println!("");
     println!("");
-    println!(r#" ========== RPC "{}" RECEIVED ======================="#,
-             path.to_str().unwrap());
+    println!(
+        r#" ========== RPC "{}" RECEIVED ======================="#,
+        path.to_str().unwrap()
+    );
     println!("");
 
     if path.to_str().unwrap() == "/examples:oper" {
@@ -66,9 +75,9 @@ fn main() {
 
     let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
     let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut subscription: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+    let mut subscription: *mut sr_subscription_ctx_t =
+        unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
     let mut rc;
-
 
     println!(r#"Application will subscribe "{}" RPC."#, path);
 
@@ -97,9 +106,17 @@ fn main() {
         // Subscribe for the RPC.
         unsafe {
             let null_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-            let path = &path[..] as *const _ as * const i8;
+            let path = &path[..] as *const _ as *const i8;
 
-            rc = sr_rpc_subscribe(session, path, Some(rpc_cb), null_ptr, 0, 0, &mut subscription);
+            rc = sr_rpc_subscribe(
+                session,
+                path,
+                Some(rpc_cb),
+                null_ptr,
+                0,
+                0,
+                &mut subscription,
+            );
             if rc != sr_error_e_SR_ERR_OK as i32 {
                 break;
             }

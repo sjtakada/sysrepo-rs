@@ -4,21 +4,24 @@
 //
 
 use std::env;
-use std::slice;
-use std::mem::zeroed;
-use std::os::raw::c_void;
-use std::os::raw::c_char;
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::time;
+use std::mem::zeroed;
+use std::os::raw::c_char;
+use std::os::raw::c_void;
+use std::slice;
 use std::thread;
+use std::time;
 
-use utils::*;
 use sysrepo::*;
+use utils::*;
 
 /// Show help.
 fn print_help(program: &str) {
-    println!("Usage: {} <module-to-subscribe> [<xpath-to-subscribe>]", program);
+    println!(
+        "Usage: {} <module-to-subscribe> [<xpath-to-subscribe>]",
+        program
+    );
 }
 
 /// Print change.
@@ -46,8 +49,7 @@ fn print_change(op: sr_change_oper_t, old_val: *mut sr_val_t, new_val: *mut sr_v
                 let xpath = unsafe { CStr::from_ptr(new_val.xpath) };
                 println!("MOVED: {}", xpath.to_str().unwrap());
             }
-            _ => {
-            }
+            _ => {}
         }
     }
 }
@@ -77,23 +79,27 @@ fn print_current_config(session: *mut sr_session_ctx_t, module_name: &str) {
 }
 
 /// Module change callback.
-extern "C" fn module_change_cb(session: *mut sr_session_ctx_t,
-                               module_name: *const c_char,
-                               _xpath: *const c_char,
-                               event: sr_event_t,
-                               _request_id: u32,
-                               _private_data: *mut c_void) -> i32 {
-
+extern "C" fn module_change_cb(
+    session: *mut sr_session_ctx_t,
+    module_name: *const c_char,
+    _xpath: *const c_char,
+    event: sr_event_t,
+    _request_id: u32,
+    _private_data: *mut c_void,
+) -> i32 {
     let mut it: *mut sr_change_iter_t = unsafe { zeroed::<*mut sr_change_iter_t>() };
     let mut old_value: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
     let mut new_value: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
     let mut oper: sr_change_oper_t = 0;
-    
+
     let rc;
 
     println!("");
     println!("");
-    println!(" ========== EVENT {} CHANGES: ====================================", event);
+    println!(
+        " ========== EVENT {} CHANGES: ====================================",
+        event
+    );
     println!("");
 
     loop {
@@ -107,7 +113,9 @@ extern "C" fn module_change_cb(session: *mut sr_session_ctx_t,
         }
 
         unsafe {
-            while sr_get_change_next(session, it, &mut oper, &mut old_value, &mut new_value) == sr_error_e_SR_ERR_OK as i32 {
+            while sr_get_change_next(session, it, &mut oper, &mut old_value, &mut new_value)
+                == sr_error_e_SR_ERR_OK as i32
+            {
                 print_change(oper, old_value, new_value);
                 sr_free_val(old_value);
                 sr_free_val(new_value);
@@ -149,13 +157,20 @@ fn main() {
 
     let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
     let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut subscription: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+    let mut subscription: *mut sr_subscription_ctx_t =
+        unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
     let mut rc;
 
     let mod_name = args[1].clone();
 
-    println!(r#"Application will watch for changes in "{}"."#,
-             if args.len() == 3 { args[2].clone() } else { args[1].clone() });
+    println!(
+        r#"Application will watch for changes in "{}"."#,
+        if args.len() == 3 {
+            args[2].clone()
+        } else {
+            args[1].clone()
+        }
+    );
 
     // Turn logging on.
     unsafe {
@@ -197,9 +212,16 @@ fn main() {
                 null_ptr as *const i8
             };
 
-            rc = sr_module_change_subscribe(session, mod_name, xpath,
-                                            Some(module_change_cb),
-                                            null_ptr, 0, 0, &mut subscription);
+            rc = sr_module_change_subscribe(
+                session,
+                mod_name,
+                xpath,
+                Some(module_change_cb),
+                null_ptr,
+                0,
+                0,
+                &mut subscription,
+            );
             if rc != sr_error_e_SR_ERR_OK as i32 {
                 break;
             }

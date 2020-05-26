@@ -16,7 +16,7 @@ use sysrepo::*;
 pub fn print_val(value: &sr_val_t) {
     let sr_val_p: *const sr_val_t = value as *const sr_val_t;
     if sr_val_p.is_null() {
-        return
+        return;
     }
 
     let xpath: &CStr = unsafe { CStr::from_ptr(value.xpath) };
@@ -24,10 +24,9 @@ pub fn print_val(value: &sr_val_t) {
     print!("{} ", xpath.to_str().unwrap());
 
     let v = match value.type_ {
-        sr_type_e_SR_CONTAINER_T |
-        sr_type_e_SR_CONTAINER_PRESENCE_T => String::from("(container)"),
+        sr_type_e_SR_CONTAINER_T | sr_type_e_SR_CONTAINER_PRESENCE_T => String::from("(container)"),
         sr_type_e_SR_LIST_T => String::from("(list instance)"),
-        sr_type_e_SR_STRING_T =>  {
+        sr_type_e_SR_STRING_T => {
             let string_val = unsafe { CStr::from_ptr(value.data.string_val) };
             format!("= {}", string_val.to_str().unwrap())
         }
@@ -96,11 +95,11 @@ pub fn print_val(value: &sr_val_t) {
     };
 
     match value.type_ {
-        sr_type_e_SR_UNKNOWN_T |
-        sr_type_e_SR_CONTAINER_T |
-        sr_type_e_SR_CONTAINER_PRESENCE_T |
-        sr_type_e_SR_LIST_T |
-        sr_type_e_SR_LEAF_EMPTY_T => println!("{}", v),
+        sr_type_e_SR_UNKNOWN_T
+        | sr_type_e_SR_CONTAINER_T
+        | sr_type_e_SR_CONTAINER_PRESENCE_T
+        | sr_type_e_SR_LIST_T
+        | sr_type_e_SR_LEAF_EMPTY_T => println!("{}", v),
         _ => println!("{}{}", v, if value.dflt { " [default]" } else { "" }),
     }
 }
@@ -108,7 +107,7 @@ pub fn print_val(value: &sr_val_t) {
 static SIGTSTP_ONCE: sync::Once = sync::Once::new();
 static SIGINT_CAUGHT: sync::atomic::AtomicUsize = sync::atomic::AtomicUsize::new(0);
 
-extern fn sigint_handler(_: i32) {
+extern "C" fn sigint_handler(_: i32) {
     SIGINT_CAUGHT.fetch_add(1, sync::atomic::Ordering::SeqCst);
 }
 
@@ -126,4 +125,3 @@ pub fn signal_init() {
         let _ = signal::sigaction(signal::SIGINT, &sa);
     });
 }
-

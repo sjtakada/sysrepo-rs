@@ -4,11 +4,11 @@
 //
 
 use std::env;
-use std::slice;
 use std::mem::zeroed;
+use std::slice;
 
-use utils::print_val;
 use sysrepo::*;
+use utils::print_val;
 
 /// Show help.
 fn print_help(program: &str) {
@@ -43,8 +43,15 @@ fn main() {
         }
     }
 
-    println!(r#"Application will get "{}" from "{}" datastore."#,
-             xpath, if ds == sr_datastore_e_SR_DS_RUNNING { "running" } else { "operational" });
+    println!(
+        r#"Application will get "{}" from "{}" datastore."#,
+        xpath,
+        if ds == sr_datastore_e_SR_DS_RUNNING {
+            "running"
+        } else {
+            "operational"
+        }
+    );
 
     // Turn logging on.
     unsafe {

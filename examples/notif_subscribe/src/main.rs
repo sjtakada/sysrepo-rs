@@ -4,30 +4,41 @@
 //
 
 use std::env;
-use std::slice;
+use std::ffi::CStr;
 use std::mem::zeroed;
 use std::os::raw::c_char;
-use std::ffi::CStr;
-use std::time;
+use std::slice;
 use std::thread;
+use std::time;
 
 use sysrepo::*;
 use utils::*;
 
 /// Show help.
 fn print_help(program: &str) {
-    println!("Usage: {} <module-with-notification> [<xpath-filtering-notifications>]", program);
+    println!(
+        "Usage: {} <module-with-notification> [<xpath-filtering-notifications>]",
+        program
+    );
 }
 
 /// Notification callback.
-extern "C" fn notif_cb(_session: *mut sr_session_ctx_t, _notif_type: sr_ev_notif_type_t,
-                       path: *const c_char, values: *const sr_val_t, values_cnt: u64,
-                       _timestamp: time_t, _private_data: *mut ::std::os::raw::c_void) {
+extern "C" fn notif_cb(
+    _session: *mut sr_session_ctx_t,
+    _notif_type: sr_ev_notif_type_t,
+    path: *const c_char,
+    values: *const sr_val_t,
+    values_cnt: u64,
+    _timestamp: time_t,
+    _private_data: *mut ::std::os::raw::c_void,
+) {
     let path: &CStr = unsafe { CStr::from_ptr(path) };
     println!("");
     println!("");
-    println!(r#" ========== NOTIFICATION "{}" RECEIVED ======================="#,
-             path.to_str().unwrap());
+    println!(
+        r#" ========== NOTIFICATION "{}" RECEIVED ======================="#,
+        path.to_str().unwrap()
+    );
     println!("");
 
     unsafe {
@@ -51,7 +62,8 @@ fn main() {
 
     let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
     let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut subscription: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+    let mut subscription: *mut sr_subscription_ctx_t =
+        unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
     let mut rc;
 
     let mod_name = args[1].clone();
@@ -61,7 +73,10 @@ fn main() {
         None
     };
 
-    println!(r#"Application will subscribe "{}" notifications."#, mod_name);
+    println!(
+        r#"Application will subscribe "{}" notifications."#,
+        mod_name
+    );
 
     // Turn logging on.
     unsafe {
@@ -94,8 +109,17 @@ fn main() {
                 None => null_ptr as *const i8,
             };
 
-            rc = sr_event_notif_subscribe(session, mod_name, xpath, 0, 0, Some(notif_cb),
-                                          null_ptr, 0, &mut subscription);
+            rc = sr_event_notif_subscribe(
+                session,
+                mod_name,
+                xpath,
+                0,
+                0,
+                Some(notif_cb),
+                null_ptr,
+                0,
+                &mut subscription,
+            );
             if rc != sr_error_e_SR_ERR_OK as i32 {
                 break;
             }
