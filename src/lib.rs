@@ -5,8 +5,10 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use std::mem::zeroed;
+use std::time::Duration;
 
 /// Error.
+#[derive(Copy, Clone)]
 pub enum SrError {
     Ok = sr_error_e_SR_ERR_OK as isize,
     InvalArg = sr_error_e_SR_ERR_INVAL_ARG as isize,
@@ -147,7 +149,7 @@ pub enum SrNotifType {
 /// Sysrepo.
 pub struct Sysrepo {
 
-    /// Connection.
+    /// Raw Pointer to Connection.
     conn: *mut sr_conn_ctx_t,
 }
 
@@ -155,7 +157,7 @@ impl Sysrepo {
 
     /// Constructor.
     pub fn new(opts: sr_conn_options_t) -> Result<Sysrepo, i32> {
-        let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
+        let mut conn = std::ptr::null_mut();
 
         let rc = unsafe {
             sr_connect(opts, &mut conn)
@@ -177,6 +179,36 @@ impl Sysrepo {
         }
         self.conn = std::ptr::null_mut();
     }
+
+    /// Start session.
+    pub fn start_session(&mut self, ds: SrDatastore) -> Result<SysrepoSession, i32> {
+        let mut sess = std::ptr::null_mut();
+        let rc = unsafe {
+            sr_session_start(self.conn, ds as u32, &mut sess)
+        };
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(SysrepoSession {
+                sess: sess,
+            })
+        }
+    }
+
+    /// Set Log Stderr.
+    pub fn log_stderr(log_level: SrLogLevel) {
+        unsafe {
+            sr_log_stderr(log_level as u32);
+        }
+    }
+
+    /// Set Log Syslog.
+    pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
+        let app_name = &app_name[..] as *const _ as *const i8;
+        unsafe {
+            sr_log_syslog(app_name, log_level as u32);
+        }
+    }
 }
 
 impl Drop for Sysrepo {
@@ -185,4 +217,59 @@ impl Drop for Sysrepo {
     }
 }
 
+/// Sysrepo session.
+pub struct SysrepoSession {
 
+    /// Raw Pointer to session.
+    sess: *mut sr_session_ctx_t,
+}
+
+impl SysrepoSession {
+
+    pub fn new() -> SysrepoSession {
+        SysrepoSession {
+            sess: std::ptr::null_mut(),
+        }
+    }
+
+    pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
+                        opts: u32) -> Result<(), i32> {
+        let path = &path[..] as *const _ as *const i8;
+        let value = &value[..] as *const _ as *const i8;
+        let origin = match origin {
+            Some(orig) => &orig[..] as *const _ as *const i8,
+            None => std::ptr::null(),
+        };
+
+        let rc = unsafe { sr_set_item_str(self.sess, path, value, origin, opts) };
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn apply_changes(&mut self, timeout: Option<Duration>, wait: bool) -> Result<(), i32> {
+        let timeout_ms = match timeout {
+            Some(timeout) => timeout.as_millis() as u32,
+            None => 0,
+        };
+
+        let rc = unsafe {
+            sr_apply_changes(self.sess, timeout_ms, if wait { 1 } else { 0 })
+        };
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Drop for SysrepoSession {
+    fn drop (&mut self) {
+        unsafe {
+            sr_session_stop(self.sess);
+        }
+    }
+}
