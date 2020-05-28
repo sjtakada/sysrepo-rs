@@ -5,6 +5,8 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use std::mem::zeroed;
+use std::os::raw::c_char;
+use std::os::raw::c_void;
 use std::time::Duration;
 
 /// Error.
@@ -264,6 +266,54 @@ impl SysrepoSession {
             Ok(())
         }
     }
+
+    pub fn event_notif_subscribe<F>(&mut self, module_name: &str, xpath: Option<String>,
+                                    start_time: time_t, stop_time: time_t,
+                                    callback: F, _private_data: *mut c_void,
+                                    opts: sr_subscr_options_t,
+                                    subscription: *mut *mut sr_subscription_ctx_t)
+                                    -> Result<(), i32>
+    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
+                   *const sr_val_t, size_t, time_t, *mut c_void) + 'static
+    {
+        let module_name = &module_name[..] as *const _ as *const i8;
+        let xpath = match xpath {
+            Some(xpath) => &xpath[..] as *const _ as * const i8,
+            None => std::ptr::null_mut(),
+        };
+
+        let data = Box::into_raw(Box::new(callback));
+
+        let rc = unsafe {
+            sr_event_notif_subscribe(self.sess, module_name,
+                                     xpath, start_time, stop_time,
+                                     Some(call_closure::<F>),
+                                     data as *mut _, opts,
+                                     subscription)
+        };
+
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+unsafe extern "C" fn call_closure<F>(
+          sess: *mut sr_session_ctx_t,
+          notif_type: sr_ev_notif_type_t,
+          path: *const c_char,
+          values: *const sr_val_t,
+          values_cnt: size_t,
+          timestamp: time_t,
+          private_data: *mut c_void)
+where F:  FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
+                *const sr_val_t, size_t, time_t, *mut c_void)
+{
+    let callback_ptr = private_data as *mut F;
+    let callback = &mut *callback_ptr;
+    callback(sess, notif_type, path, values, values_cnt, timestamp, private_data);
 }
 
 impl Drop for SysrepoSession {
