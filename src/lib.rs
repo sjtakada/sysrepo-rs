@@ -226,10 +226,11 @@ pub struct SysrepoSession {
     sess: *mut sr_session_ctx_t,
 }
 
+
 impl SysrepoSession {
 
-    pub fn new() -> SysrepoSession {
-        SysrepoSession {
+    pub fn new() -> Self {
+        Self {
             sess: std::ptr::null_mut(),
         }
     }
@@ -270,11 +271,10 @@ impl SysrepoSession {
     pub fn event_notif_subscribe<F>(&mut self, mod_name: &str, xpath: Option<String>,
                                     start_time: Option<time_t>, stop_time: Option<time_t>,
                                     callback: F, _private_data: *mut c_void,
-                                    opts: sr_subscr_options_t,
-                                    subscription: *mut *mut sr_subscription_ctx_t)
-                                    -> Result<(), i32>
+                                    opts: sr_subscr_options_t)
+                                    -> Result<SysrepoSubscription, i32>
     where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
-                   *const sr_val_t, size_t, time_t, *mut c_void) + 'static
+                   *const sr_val_t, size_t, time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
         let xpath = match xpath {
@@ -290,17 +290,20 @@ impl SysrepoSession {
             None => 0,
         };
 
+        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
         let rc = unsafe {
             sr_event_notif_subscribe(self.sess, mod_name, xpath, start_time, stop_time,
                                      Some(SysrepoSession::call_event_notif::<F>),
-                                     data as *mut _, opts, subscription)
+                                     data as *mut _, opts, &mut subscr)
         };
 
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(())
+            let mut ss = SysrepoSubscription::new();
+            ss.subscr = subscr;
+            Ok(ss)
         }
     }
 
@@ -313,12 +316,12 @@ impl SysrepoSession {
         timestamp: time_t,
         private_data: *mut c_void)
     where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
-                   *const sr_val_t, size_t, time_t, *mut c_void)
+                   *const sr_val_t, size_t, time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
-        // As we consumed private_data, we pass null_ptr instead.
-        callback(sess, notif_type, path, values, values_cnt, timestamp, std::ptr::null_mut());
+
+        callback(sess, notif_type, path, values, values_cnt, timestamp);
     }
 }
 
@@ -329,3 +332,29 @@ impl Drop for SysrepoSession {
         }
     }
 }
+
+/// Sysrepo Subscription.
+pub struct SysrepoSubscription {
+
+    /// Raw Pointer to subscription.
+    subscr: *mut sr_subscription_ctx_t,
+}
+
+impl SysrepoSubscription {
+
+    pub fn new() -> Self {
+        Self {
+            subscr: std::ptr::null_mut(),
+        }
+    }
+}
+
+/*
+impl Drop for SysrepoSubscription {
+    fn drop (&mut self) {
+        unsafe {
+            
+        }
+    }
+}
+*/

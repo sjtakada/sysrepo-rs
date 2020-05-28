@@ -65,11 +65,9 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    let mut subscription: *mut sr_subscription_ctx_t =
-        unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
     let f = |sess: *mut sr_session_ctx_t, notif_type:sr_ev_notif_type_t,
              path: *const c_char, values: *const sr_val_t, values_cnt: size_t,
-             timestamp: time_t, _private_data: *mut c_void|
+             timestamp: time_t|
     {
         let path: &CStr = unsafe { CStr::from_ptr(path) };
         println!("");
@@ -90,8 +88,7 @@ fn run() -> bool {
     };
 
     if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
-                                               std::ptr::null_mut(), 0,
-                                               &mut subscription) {
+                                               std::ptr::null_mut(), 0) {
         return false;
     }
 
