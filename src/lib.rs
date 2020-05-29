@@ -217,11 +217,7 @@ impl Sysrepo {
             let id = unsafe {
                 sr_session_get_id(sess)
             };
-            let sess = SysrepoSession {
-                sess: sess,
-            };
-
-            self.insert_session(id, sess);
+            self.insert_session(id, SysrepoSession::from(sess));
             Ok(self.sessions.get_mut(&id).unwrap())
         }
     }
@@ -254,6 +250,12 @@ pub struct SysrepoSession {
 
     /// Raw Pointer to session.
     sess: *mut sr_session_ctx_t,
+
+    /// Incremental subscription ID.
+    id: usize,
+
+    /// Map from raw pointer to subscription.
+    subscrs: HashMap<usize, SysrepoSubscription>,
 }
 
 
@@ -262,6 +264,16 @@ impl SysrepoSession {
     pub fn new() -> Self {
         Self {
             sess: std::ptr::null_mut(),
+            id: 0,
+            subscrs: HashMap::new(),
+        }
+    }
+
+    pub fn from(sess: *mut sr_session_ctx_t) -> Self {
+        Self {
+            sess: sess,
+            id: 0,
+            subscrs: HashMap::new(),
         }
     }
 
@@ -269,6 +281,20 @@ impl SysrepoSession {
         unsafe {
             sr_session_get_id(self.sess)
         }
+    }
+
+    pub fn insert_subscription(&mut self, subscr: SysrepoSubscription) -> usize {
+        self.id += 1;
+        self.subscrs.insert(self.id, subscr);
+        self.id
+    }
+
+    pub fn remove_subscription(&mut self, id: usize) {
+        self.subscrs.remove(&id);
+    }
+
+    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SysrepoSubscription> {
+        self.subscrs.get_mut(&id)
     }
 
     pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
@@ -308,7 +334,7 @@ impl SysrepoSession {
                                     start_time: Option<time_t>, stop_time: Option<time_t>,
                                     callback: F, _private_data: *mut c_void,
                                     opts: sr_subscr_options_t)
-                                    -> Result<SysrepoSubscription, i32>
+                                    -> Result<&mut SysrepoSubscription, i32>
     where F: FnMut(u32, sr_ev_notif_type_t, &str,
                    &[sr_val_t], time_t) + 'static,
     {
@@ -337,9 +363,8 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let mut ss = SysrepoSubscription::new();
-            ss.subscr = subscr;
-            Ok(ss)
+            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            Ok(self.subscrs.get_mut(&id).unwrap())
         }
     }
 
@@ -366,6 +391,8 @@ impl SysrepoSession {
 
 impl Drop for SysrepoSession {
     fn drop (&mut self) {
+        self.subscrs.drain();
+
         unsafe {
             sr_session_stop(self.sess);
         }
@@ -384,6 +411,12 @@ impl SysrepoSubscription {
     pub fn new() -> Self {
         Self {
             subscr: std::ptr::null_mut(),
+        }
+    }
+
+    pub fn from(subscr: *mut sr_subscription_ctx_t) -> Self {
+        Self {
+            subscr: subscr,
         }
     }
 }
