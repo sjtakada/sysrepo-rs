@@ -4,11 +4,9 @@
 //
 
 use std::env;
-use std::mem::zeroed;
-use std::os::raw::c_char;
 use std::thread;
 use std::time;
-use std::os::raw::c_void;
+use std::sync::Arc;
 
 use sysrepo::*;
 use utils::*;
@@ -63,7 +61,7 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    let f = |_sess: *mut sr_session_ctx_t, _notif_type:sr_ev_notif_type_t,
+    let f = |_id: u32, _notif_type:sr_ev_notif_type_t,
              path: &str, vals: &[sr_val_t], _timestamp: time_t|
     {
         println!("");
@@ -78,9 +76,11 @@ fn run() -> bool {
         }
     };
 
-    if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
-                                               std::ptr::null_mut(), 0) {
-        return false;
+    if let Some(sess) = Arc::get_mut(&mut sess) { 
+        if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
+                                                   std::ptr::null_mut(), 0) {
+            return false;
+        }
     }
 
     println!("\n\n ========== LISTENING FOR NOTIFICATIONS ==========\n");

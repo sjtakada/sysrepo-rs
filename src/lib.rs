@@ -10,6 +10,8 @@ use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::time::Duration;
 use std::ffi::CStr;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Error.
 #[derive(Copy, Clone)]
@@ -155,6 +157,9 @@ pub struct Sysrepo {
 
     /// Raw Pointer to Connection.
     conn: *mut sr_conn_ctx_t,
+
+    /// Map from sid.sr to SysrepoSession.
+    sessions: HashMap<u32, Arc<SysrepoSession>>,
 }
 
 impl Sysrepo {
@@ -172,6 +177,7 @@ impl Sysrepo {
         } else {
             Ok(Sysrepo {
                 conn: conn,
+                sessions: HashMap::new(),
             })
         }
     }
@@ -184,8 +190,18 @@ impl Sysrepo {
         self.conn = std::ptr::null_mut();
     }
 
+    /// Add session to map.
+    pub fn insert_session(&mut self, id: u32, sess: Arc<SysrepoSession>) {
+        self.sessions.insert(id, sess);
+    }
+
+    /// Add session to map.
+    pub fn remove_session(&mut self, id: u32) {
+        self.sessions.remove(&id);
+    }
+
     /// Start session.
-    pub fn start_session(&mut self, ds: SrDatastore) -> Result<SysrepoSession, i32> {
+    pub fn start_session(&mut self, ds: SrDatastore) -> Result<Arc<SysrepoSession>, i32> {
         let mut sess = std::ptr::null_mut();
         let rc = unsafe {
             sr_session_start(self.conn, ds as u32, &mut sess)
@@ -193,9 +209,16 @@ impl Sysrepo {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(SysrepoSession {
+            let id = unsafe {
+                sr_session_get_id(sess)
+            };
+            let sess = Arc::new(SysrepoSession {
                 sess: sess,
-            })
+            });
+
+            self.insert_session(id, sess.clone());
+
+            Ok(sess)
         }
     }
 
@@ -237,6 +260,12 @@ impl SysrepoSession {
         }
     }
 
+    pub fn get_id(&self) -> u32 {
+        unsafe {
+            sr_session_get_id(self.sess)
+        }
+    }
+
     pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
                         opts: u32) -> Result<(), i32> {
         let path = &path[..] as *const _ as *const i8;
@@ -275,7 +304,7 @@ impl SysrepoSession {
                                     callback: F, _private_data: *mut c_void,
                                     opts: sr_subscr_options_t)
                                     -> Result<SysrepoSubscription, i32>
-    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, &str,
+    where F: FnMut(u32, sr_ev_notif_type_t, &str,
                    &[sr_val_t], time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
@@ -317,7 +346,7 @@ impl SysrepoSession {
         values_cnt: size_t,
         timestamp: time_t,
         private_data: *mut c_void)
-    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t,
+    where F: FnMut(u32, sr_ev_notif_type_t,
                    &str, &[sr_val_t], time_t),
     {
         let callback_ptr = private_data as *mut F;
@@ -326,7 +355,7 @@ impl SysrepoSession {
         let path: &CStr = unsafe { CStr::from_ptr(path) };
         let vals: &[sr_val_t] = slice::from_raw_parts(values, values_cnt as usize);
 
-        callback(sess, notif_type, path.to_str().unwrap(), vals, timestamp);
+        callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), vals, timestamp);
     }
 }
 
