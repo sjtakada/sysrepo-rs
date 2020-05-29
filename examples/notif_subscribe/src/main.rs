@@ -6,7 +6,6 @@
 use std::env;
 use std::thread;
 use std::time;
-use std::sync::Arc;
 
 use sysrepo::*;
 use utils::*;
@@ -56,7 +55,7 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    let mut sess = match sr.start_session(SrDatastore::Running) {
+    let sess = match sr.start_session(SrDatastore::Running) {
         Ok(sess) => sess,
         Err(_) => return false,
     };
@@ -76,11 +75,9 @@ fn run() -> bool {
         }
     };
 
-    if let Some(sess) = Arc::get_mut(&mut sess) { 
-        if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
-                                                   std::ptr::null_mut(), 0) {
-            return false;
-        }
+    if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
+                                               std::ptr::null_mut(), 0) {
+        return false;
     }
 
     println!("\n\n ========== LISTENING FOR NOTIFICATIONS ==========\n");

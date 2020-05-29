@@ -159,7 +159,7 @@ pub struct Sysrepo {
     conn: *mut sr_conn_ctx_t,
 
     /// Map from sid.sr to SysrepoSession.
-    sessions: HashMap<u32, Arc<SysrepoSession>>,
+    sessions: HashMap<u32, SysrepoSession>,
 }
 
 impl Sysrepo {
@@ -191,7 +191,7 @@ impl Sysrepo {
     }
 
     /// Add session to map.
-    pub fn insert_session(&mut self, id: u32, sess: Arc<SysrepoSession>) {
+    pub fn insert_session(&mut self, id: u32, sess: SysrepoSession) {
         self.sessions.insert(id, sess);
     }
 
@@ -200,8 +200,13 @@ impl Sysrepo {
         self.sessions.remove(&id);
     }
 
+    /// Lookup session from map.
+    pub fn lookup_session(&mut self, id: &u32) -> Option<&mut SysrepoSession> {
+        self.sessions.get_mut(id)
+    }
+
     /// Start session.
-    pub fn start_session(&mut self, ds: SrDatastore) -> Result<Arc<SysrepoSession>, i32> {
+    pub fn start_session(&mut self, ds: SrDatastore) -> Result<&mut SysrepoSession, i32> {
         let mut sess = std::ptr::null_mut();
         let rc = unsafe {
             sr_session_start(self.conn, ds as u32, &mut sess)
@@ -212,13 +217,12 @@ impl Sysrepo {
             let id = unsafe {
                 sr_session_get_id(sess)
             };
-            let sess = Arc::new(SysrepoSession {
+            let sess = SysrepoSession {
                 sess: sess,
-            });
+            };
 
-            self.insert_session(id, sess.clone());
-
-            Ok(sess)
+            self.insert_session(id, sess);
+            Ok(self.sessions.get_mut(&id).unwrap())
         }
     }
 
@@ -240,6 +244,7 @@ impl Sysrepo {
 
 impl Drop for Sysrepo {
     fn drop (&mut self) {
+        self.sessions.drain();
         self.disconnect();
     }
 }
