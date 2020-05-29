@@ -4,10 +4,12 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+use std::slice;
 use std::mem::zeroed;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::time::Duration;
+use std::ffi::CStr;
 
 /// Error.
 #[derive(Copy, Clone)]
@@ -273,8 +275,8 @@ impl SysrepoSession {
                                     callback: F, _private_data: *mut c_void,
                                     opts: sr_subscr_options_t)
                                     -> Result<SysrepoSubscription, i32>
-    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
-                   *const sr_val_t, size_t, time_t) + 'static,
+    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, &str,
+                   &[sr_val_t], time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
         let xpath = match xpath {
@@ -315,13 +317,16 @@ impl SysrepoSession {
         values_cnt: size_t,
         timestamp: time_t,
         private_data: *mut c_void)
-    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t, *const c_char,
-                   *const sr_val_t, size_t, time_t),
+    where F: FnMut(*mut sr_session_ctx_t, sr_ev_notif_type_t,
+                   &str, &[sr_val_t], time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
-        callback(sess, notif_type, path, values, values_cnt, timestamp);
+        let path: &CStr = unsafe { CStr::from_ptr(path) };
+        let vals: &[sr_val_t] = slice::from_raw_parts(values, values_cnt as usize);
+
+        callback(sess, notif_type, path.to_str().unwrap(), vals, timestamp);
     }
 }
 
@@ -353,7 +358,7 @@ impl SysrepoSubscription {
 impl Drop for SysrepoSubscription {
     fn drop (&mut self) {
         unsafe {
-            
+
         }
     }
 }

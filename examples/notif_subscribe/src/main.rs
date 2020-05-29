@@ -4,10 +4,8 @@
 //
 
 use std::env;
-use std::ffi::CStr;
 use std::mem::zeroed;
 use std::os::raw::c_char;
-use std::slice;
 use std::thread;
 use std::time;
 use std::os::raw::c_void;
@@ -65,25 +63,18 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    let f = |sess: *mut sr_session_ctx_t, notif_type:sr_ev_notif_type_t,
-             path: *const c_char, values: *const sr_val_t, values_cnt: size_t,
-             timestamp: time_t|
+    let f = |_sess: *mut sr_session_ctx_t, _notif_type:sr_ev_notif_type_t,
+             path: &str, vals: &[sr_val_t], _timestamp: time_t|
     {
-        let path: &CStr = unsafe { CStr::from_ptr(path) };
         println!("");
         println!("");
         println!(
-            r#" ========== NOTIFICATION "{}" RECEIVED ======================="#,
-            path.to_str().unwrap()
+            r#" ========== NOTIFICATION "{}" RECEIVED ======================="#, path
         );
         println!("");
 
-        unsafe {
-            let vals: &[sr_val_t] = slice::from_raw_parts(values, values_cnt as usize);
-
-            for i in 0..vals.len() {
-                print_val(&vals[i]);
-            }
+        for i in 0..vals.len() {
+            print_val(&vals[i]);
         }
     };
 
