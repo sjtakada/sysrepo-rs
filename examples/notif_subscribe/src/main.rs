@@ -48,18 +48,22 @@ fn run() -> bool {
         mod_name
     );
 
+    // Turn logging on.
     Sysrepo::log_stderr(SrLogLevel::Warn);
 
+    // Connect to sysrepo.
     let mut sr = match Sysrepo::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };
 
+    // Start session.
     let sess = match sr.start_session(SrDatastore::Running) {
         Ok(sess) => sess,
         Err(_) => return false,
     };
 
+    // Callback function.
     let f = |_id: u32, _notif_type:sr_ev_notif_type_t,
              path: &str, vals: &[sr_val_t], _timestamp: time_t|
     {
@@ -75,6 +79,7 @@ fn run() -> bool {
         }
     };
 
+    // Subscribe for the notifications.
     if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f,
                                                std::ptr::null_mut(), 0) {
         return false;
@@ -82,6 +87,7 @@ fn run() -> bool {
 
     println!("\n\n ========== LISTENING FOR NOTIFICATIONS ==========\n");
 
+    // Loop until ctrl-c is pressed / SIGINT is received.
     signal_init();
     while !is_sigint_caught() {
         thread::sleep(time::Duration::from_secs(1));

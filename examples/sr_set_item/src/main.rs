@@ -35,22 +35,27 @@ fn run() -> bool {
 
     println!(r#"Application will get "{}" to "{}"."#, xpath, value);
 
+    // Turn logging on.
     Sysrepo::log_stderr(SrLogLevel::Warn);
 
+    // Connect to sysrepo.
     let mut sr = match Sysrepo::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };
 
-    let mut sess = match sr.start_session(SrDatastore::Running) {
+    // Start session.
+    let sess = match sr.start_session(SrDatastore::Running) {
         Ok(sess) => sess,
         Err(_) => return false,
     };
 
+    // Set the value.
     if let Err(_) = sess.set_item_str(&xpath, &value, None, 0) {
         return false;
     }
 
+    // Apply the change.
     if let Err(_) = sess.apply_changes(None, false) {
         return false;
     }

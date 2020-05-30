@@ -19,12 +19,20 @@ fn print_help(program: &str) {
 
 /// Main.
 fn main() {
+    if run() {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn run() -> bool {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
     if args.len() < 2 || args.len() > 4 || args.len() == 3 {
         print_help(&program);
-        std::process::exit(1);
+        return false;
     }
 
     let path = args[1].clone();
@@ -34,9 +42,9 @@ fn main() {
         None
     };
 
-    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
-    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut rc;
+//    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
+//    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
+//    let mut rc;
 
     println!(
         r#"Application will send notification "{}" notification."#,
@@ -44,33 +52,24 @@ fn main() {
     );
 
     // Turn logging on.
-    unsafe {
-        sr_log_stderr(sr_log_level_t_SR_LL_WRN);
-    }
+    Sysrepo::log_stderr(SrLogLevel::Warn);
 
-    loop {
-        // Generic raw null pointer.
-        let null_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+    // Connect to sysrepo.
+    let mut sr = match Sysrepo::new(0) {
+        Ok(sr) => sr,
+        Err(_) => return false,
+    };
 
-        // Connect to sysrepo.
-        let ctx;
-        unsafe {
-            rc = sr_connect(0, &mut conn);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-            ctx = sr_get_context(conn);
-        }
+    //ctx = sr_get_context(conn);
 
-        // Start session.
-        unsafe {
-            rc = sr_session_start(conn, sr_datastore_e_SR_DS_RUNNING, &mut session);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
+    // Start session.
+    let sess = match sr.start_session(SrDatastore::Running) {
+        Ok(sess) => sess,
+        Err(_) => return false,
+    };
 
-        // Create the notification.
+    // Create the notification.
+/*
         let notif;
         unsafe {
             let path_ptr = &path[..] as *const _ as *const i8;
@@ -104,16 +103,7 @@ fn main() {
             }
         }
 
-        break;
-    }
+*/
 
-    unsafe {
-        sr_disconnect(conn);
-    }
-
-    if rc == 0 {
-        std::process::exit(0);
-    } else {
-        std::process::exit(1);
-    }
+    true
 }

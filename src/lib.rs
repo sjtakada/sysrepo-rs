@@ -222,6 +222,9 @@ impl Sysrepo {
         }
     }
 
+    // Get context.
+    //pub fn get_context(&mut self) -> Option<&LibYangCtx
+
     /// Set Log Stderr.
     pub fn log_stderr(log_level: SrLogLevel) {
         unsafe {
@@ -430,3 +433,10 @@ impl Drop for SysrepoSubscription {
     }
 }
 */
+
+/// Lib Yang Context.
+pub struct LibYangCtx {
+
+    /// Raw Pointer to Lib Yang Context.
+    ly_ctx: *const ly_ctx,
+}
