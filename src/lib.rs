@@ -358,18 +358,10 @@ impl SysrepoSession {
                    &[sr_val_t], time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
-        let xpath = match xpath {
-            Some(xpath) => &xpath[..] as *const _ as * const i8,
-            None => std::ptr::null_mut(),
-        };
-        let start_time = match start_time {
-            Some(start_time) => start_time,
-            None => 0,
-        };
-        let stop_time = match stop_time {
-            Some(stop_time) => stop_time,
-            None => 0,
-        };
+        let xpath = xpath.map_or(std::ptr::null_mut(),
+                                 |xpath| &xpath[..] as *const _ as * mut i8);
+        let start_time = start_time.unwrap_or(0);
+        let stop_time = stop_time.unwrap_or(0);
 
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -551,14 +543,8 @@ impl LibYang {
     pub fn lyd_new_path(node: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
                         path: &str, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
 
-        let node = match node {
-            Some(node) => node.get_node(),
-            None => std::ptr::null_mut(),
-        };
-        let ctx = match ly_ctx {
-            Some(ly_ctx) => ly_ctx.get_ctx(),
-            None => std::ptr::null_mut(),
-        };
+        let node = node.map_or(std::ptr::null_mut(), |node| node.get_node());
+        let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| ly_ctx.get_ctx() as *mut ly_ctx);
         let path = &path[..] as *const _ as * const i8;
         let node = match value {
             Some(value) => {
