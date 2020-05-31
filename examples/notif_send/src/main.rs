@@ -41,17 +41,13 @@ fn run() -> bool {
         None
     };
 
-//    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
-//    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-//    let mut rc;
-
     println!(
         r#"Application will send notification "{}" notification."#,
         path
     );
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Debug);
+    Sysrepo::log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
     let mut sr = match Sysrepo::new(0) {
@@ -79,11 +75,9 @@ fn run() -> bool {
 
     // Add the input value.
     if let Some((path, value)) = node_path_val {
-println!("*** 0 {:?} {:?}", path, value);
 
-//        let value = LydValue::from_string(value);
-        match LibYang::lyd_new_path2(Some(&notif), None, &path, &value, 0) {
-//        match LibYang::lyd_new_path2(Some(&notif), None, &path, Some(value), 0) {
+        let value = LydValue::from_string(value);
+        match LibYang::lyd_new_path(Some(&notif), None, &path, Some(&value), 0) {
             Some(_) => {},
             None => {
                 println!(r#"Creating value "{}" failed."#, path);

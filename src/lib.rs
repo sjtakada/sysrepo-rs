@@ -487,7 +487,7 @@ impl LibYangCtx {
 pub struct LydNode {
 
     /// Raw pointer to LibYang data node.
-    pub node: *mut lyd_node,
+    node: *mut lyd_node,
 }
 
 impl LydNode {
@@ -522,8 +522,12 @@ impl LydValue {
         }
     }
 
-    pub fn get_value(&self) -> *mut c_void{
-        &self.value[..] as *const _ as *mut c_void
+    pub fn get_value(&self) -> &str {
+        &self.value
+    }
+
+    pub fn get_value_raw(&self) -> *mut c_void {
+        self.get_value() as *const _ as *mut c_void
     }
 
     pub fn get_type(&self) -> LydAnyDataValueType {
@@ -538,11 +542,11 @@ pub struct LibYang {
 
 impl LibYang {
 
-    pub fn lyd_new_path(data_tree: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
-                        path: &str, value: Option<LydValue>, options: i32) -> Option<LydNode> {
+    pub fn lyd_new_path(node: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
+                        path: &str, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
 
-        let data_tree = match data_tree {
-            Some(data_tree) => data_tree.get_node(),
+        let node = match node {
+            Some(node) => node.get_node(),
             None => std::ptr::null_mut(),
         };
         let ctx = match ly_ctx {
@@ -550,64 +554,31 @@ impl LibYang {
             None => std::ptr::null_mut(),
         };
         let path = &path[..] as *const _ as * const i8;
-        let (value, value_type) = match value {
-            Some(value) => (value.get_value(), value.get_type()),
-            None => (std::ptr::null_mut(), LydAnyDataValueType::ConstString),
+        let node = match value {
+            Some(value) => {
+                let value_type = value.get_type();
+                let value = String::from(value.get_value());
+                let value = &value[..] as *const _ as *mut c_void;
+
+                unsafe {
+                    lyd_new_path(node, ctx, path, value, value_type as u32, options)
+                }
+            }
+            None => {
+                unsafe {
+                    lyd_new_path(node, ctx, path, std::ptr::null_mut(),
+                                 LydAnyDataValueType::ConstString as u32, options)
+                }
+            }
         };
         // Value type fallbacks to ConstString, is it OK?
 
-println!("*** 1 path {:?} value {:?}", path, value);
-println!("*** 1 tree {:?} ctx {:?}", data_tree, ctx);
-println!("*** 1 vtype {:?} opts {:?}", value_type as u32, options);
-
-        let node = unsafe {
-            lyd_new_path(data_tree, ctx, path, value, value_type as u32, options)
-        };
-println!("*** 2 node {:?}", node);
         if node != std::ptr::null_mut() {
             Some(LydNode::from(node))
         } else {
             None
         }
     }
-
-    pub fn lyd_new_path2(node: Option<&LydNode>, ctx: Option<&LibYangCtx>,
-                         path: &str, value: &str, options: i32
-        
-        /*data_tree: Option<&LydNode>, ctx: Option<&LibYangCtx>,
-                         path: &str, value: Option<LydValue>, options: i32*/) -> Option<LydNode> {
-
-        let node = match node {
-            Some(node) => node.get_node(),
-            None => std::ptr::null_mut(),
-        };
-        let ctx = match ctx {
-            Some(ctx) => ctx.get_ctx(),
-            None => std::ptr::null_mut(),
-        };
-        let path = &path[..] as *const _ as * const i8;
-/*
-        let (value, value_type) = match value {
-            Some(value) => (value.get_value(), value.get_type()),
-            None => (std::ptr::null_mut(), LydAnyDataValueType::ConstString),
-        };
-*/
-        // Value type fallbacks to ConstString, is it OK?
-
-        let value = &value[..] as *const _ as *mut c_void;
-
-        let node = unsafe {
-            lyd_new_path(node, ctx, path, value, 0, 0)
-        };
-
-println!("*** 2 node {:?}", node);
-        if node != std::ptr::null_mut() {
-            Some(LydNode::from(node))
-        } else {
-            None
-        }
-    }
-
 }
 
 
