@@ -80,6 +80,8 @@ fn run() -> bool {
         match LibYang::lyd_new_path(Some(&notif), None, &path, Some(&value), 0) {
             Some(_) => {},
             None => {
+                notif.free_withsiblings();
+
                 println!(r#"Creating value "{}" failed."#, path);
                 return false;
             }
@@ -88,8 +90,11 @@ fn run() -> bool {
 
     // Send the notification.
     if let Err(_) = sess.event_notif_send_tree(&notif) {
+        notif.free_withsiblings();
+
         return false;
     }
 
+    notif.free_withsiblings();
     true
 }

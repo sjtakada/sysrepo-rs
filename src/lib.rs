@@ -501,6 +501,12 @@ impl LydNode {
     pub fn get_node(&self) -> *mut lyd_node {
         self.node
     }
+
+    pub fn free_withsiblings(&self) {
+        unsafe {
+            lyd_free_withsiblings(self.node);
+        }
+    }
 }
 
 /// LibYang data value.
