@@ -4,8 +4,7 @@
 //
 
 use std::env;
-use std::ffi::c_void;
-use std::mem::zeroed;
+use std::os::raw::c_void;
 
 use sysrepo::*;
 
@@ -52,7 +51,7 @@ fn run() -> bool {
     );
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Warn);
+    Sysrepo::log_stderr(SrLogLevel::Debug);
 
     // Connect to sysrepo.
     let mut sr = match Sysrepo::new(0) {
@@ -60,7 +59,8 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    //ctx = sr_get_context(conn);
+    // Get Lib Yang Context from sysrepo connection.
+    let ly_ctx = sr.get_context();
 
     // Start session.
     let sess = match sr.start_session(SrDatastore::Running) {
@@ -69,41 +69,33 @@ fn run() -> bool {
     };
 
     // Create the notification.
-/*
-        let notif;
-        unsafe {
-            let path_ptr = &path[..] as *const _ as *const i8;
-            notif = lyd_new_path(null_ptr as *mut lyd_node, ctx, path_ptr, null_ptr, 0, 0);
-            if notif == null_ptr as *mut lyd_node {
-                println!(r#"Creating notification "{}" failed."#, path);
-                break;
+    let notif = match LibYang::lyd_new_path(None, Some(&ly_ctx), &path, None, 0) {
+        Some(notif) => notif,
+        None => {
+            println!(r#"Creating notification "{}" failed."#, path);
+            return false;
+        }
+    };
+
+    // Add the input value.
+    if let Some((path, value)) = node_path_val {
+println!("*** 0 {:?} {:?}", path, value);
+
+//        let value = LydValue::from_string(value);
+        match LibYang::lyd_new_path2(Some(&notif), None, &path, &value, 0) {
+//        match LibYang::lyd_new_path2(Some(&notif), None, &path, Some(value), 0) {
+            Some(_) => {},
+            None => {
+                println!(r#"Creating value "{}" failed."#, path);
+                return false;
             }
         }
+    }
 
-        // Add the input value.
-        unsafe {
-            if let Some((path, val)) = node_path_val {
-                let path_ptr = &path[..] as *const _ as *const i8;
-                let val_ptr = &val[..] as *const _ as *mut c_void;
-
-                let ret_node =
-                    lyd_new_path(notif, null_ptr as *mut ly_ctx, path_ptr, val_ptr, 0, 0);
-                if ret_node == null_ptr as *mut lyd_node {
-                    println!(r#"Creating value "{}" failed."#, path);
-                    break;
-                }
-            }
-        }
-
-        // Send the notification.
-        unsafe {
-            rc = sr_event_notif_send_tree(session, notif);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-*/
+    // Send the notification.
+    if let Err(_) = sess.event_notif_send_tree(&notif) {
+        return false;
+    }
 
     true
 }

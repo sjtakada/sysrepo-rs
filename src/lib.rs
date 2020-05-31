@@ -11,7 +11,6 @@ use std::os::raw::c_void;
 use std::time::Duration;
 use std::ffi::CStr;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Error.
 #[derive(Copy, Clone)]
@@ -152,6 +151,21 @@ pub enum SrNotifType {
     Stop = sr_ev_notif_type_e_SR_EV_NOTIF_STOP as isize,
 }
 
+/// Lyd Anydata Value Type.
+#[derive(Clone, Copy)]
+pub enum LydAnyDataValueType {
+    ConstString = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_CONSTSTRING as isize,
+    String = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_STRING as isize,
+    Json = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_JSON as isize,
+    JsonD = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_JSOND as isize,
+    Sxml = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_SXML as isize,
+    Sxmld = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_SXMLD as isize,
+    Xml = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_XML as isize,
+    Datatree = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_DATATREE as isize,
+    Lyb = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_LYB as isize,
+    Lybd = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_LYBD as isize,
+}
+
 /// Sysrepo.
 pub struct Sysrepo {
 
@@ -223,7 +237,9 @@ impl Sysrepo {
     }
 
     // Get context.
-    //pub fn get_context(&mut self) -> Option<&LibYangCtx
+    pub fn get_context(&mut self) -> LibYangCtx {
+        LibYangCtx::from(unsafe { sr_get_context(self.conn) })
+    }
 
     /// Set Log Stderr.
     pub fn log_stderr(log_level: SrLogLevel) {
@@ -385,10 +401,21 @@ impl SysrepoSession {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
-        let path: &CStr = unsafe { CStr::from_ptr(path) };
+        let path: &CStr = CStr::from_ptr(path);
         let vals: &[sr_val_t] = slice::from_raw_parts(values, values_cnt as usize);
 
         callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), vals, timestamp);
+    }
+
+    pub fn event_notif_send_tree(&mut self, notif: &LydNode) -> Result<(), i32> {
+        let rc = unsafe {
+            sr_event_notif_send_tree(self.sess, notif.get_node())
+        };
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -435,8 +462,152 @@ impl Drop for SysrepoSubscription {
 */
 
 /// Lib Yang Context.
+///  It just holds raw pointer, but does not own the object.
 pub struct LibYangCtx {
 
     /// Raw Pointer to Lib Yang Context.
     ly_ctx: *const ly_ctx,
 }
+
+impl LibYangCtx {
+
+    /// Constructo from raw pointer.
+    pub fn from(ly_ctx: *const ly_ctx) -> Self {
+        Self {
+            ly_ctx: ly_ctx,
+        }
+    }
+
+    pub fn get_ctx(&self) -> *const ly_ctx {
+        self.ly_ctx
+    }
+}
+
+/// LibYang data node.
+pub struct LydNode {
+
+    /// Raw pointer to LibYang data node.
+    pub node: *mut lyd_node,
+}
+
+impl LydNode {
+
+    pub fn from(node: *mut lyd_node) -> Self {
+        Self {
+            node: node,
+        }
+    }
+
+    pub fn get_node(&self) -> *mut lyd_node {
+        self.node
+    }
+}
+
+/// LibYang data value.
+pub struct LydValue {
+
+    value_type: LydAnyDataValueType,
+
+    /// TBD: It is string for now.
+    ///      It has to be variable length of byte array.
+    value: String,
+}
+
+impl LydValue {
+
+    pub fn from_string(s: String) -> Self {
+        Self {
+            value_type: LydAnyDataValueType::ConstString,
+            value: s.clone(),
+        }
+    }
+
+    pub fn get_value(&self) -> *mut c_void{
+        &self.value[..] as *const _ as *mut c_void
+    }
+
+    pub fn get_type(&self) -> LydAnyDataValueType {
+        self.value_type
+    }
+}
+
+/// Lib Yang Utilities.
+pub struct LibYang {
+
+}
+
+impl LibYang {
+
+    pub fn lyd_new_path(data_tree: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
+                        path: &str, value: Option<LydValue>, options: i32) -> Option<LydNode> {
+
+        let data_tree = match data_tree {
+            Some(data_tree) => data_tree.get_node(),
+            None => std::ptr::null_mut(),
+        };
+        let ctx = match ly_ctx {
+            Some(ly_ctx) => ly_ctx.get_ctx(),
+            None => std::ptr::null_mut(),
+        };
+        let path = &path[..] as *const _ as * const i8;
+        let (value, value_type) = match value {
+            Some(value) => (value.get_value(), value.get_type()),
+            None => (std::ptr::null_mut(), LydAnyDataValueType::ConstString),
+        };
+        // Value type fallbacks to ConstString, is it OK?
+
+println!("*** 1 path {:?} value {:?}", path, value);
+println!("*** 1 tree {:?} ctx {:?}", data_tree, ctx);
+println!("*** 1 vtype {:?} opts {:?}", value_type as u32, options);
+
+        let node = unsafe {
+            lyd_new_path(data_tree, ctx, path, value, value_type as u32, options)
+        };
+println!("*** 2 node {:?}", node);
+        if node != std::ptr::null_mut() {
+            Some(LydNode::from(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn lyd_new_path2(node: Option<&LydNode>, ctx: Option<&LibYangCtx>,
+                         path: &str, value: &str, options: i32
+        
+        /*data_tree: Option<&LydNode>, ctx: Option<&LibYangCtx>,
+                         path: &str, value: Option<LydValue>, options: i32*/) -> Option<LydNode> {
+
+        let node = match node {
+            Some(node) => node.get_node(),
+            None => std::ptr::null_mut(),
+        };
+        let ctx = match ctx {
+            Some(ctx) => ctx.get_ctx(),
+            None => std::ptr::null_mut(),
+        };
+        let path = &path[..] as *const _ as * const i8;
+/*
+        let (value, value_type) = match value {
+            Some(value) => (value.get_value(), value.get_type()),
+            None => (std::ptr::null_mut(), LydAnyDataValueType::ConstString),
+        };
+*/
+        // Value type fallbacks to ConstString, is it OK?
+
+        let value = &value[..] as *const _ as *mut c_void;
+
+        let node = unsafe {
+            lyd_new_path(node, ctx, path, value, 0, 0)
+        };
+
+println!("*** 2 node {:?}", node);
+        if node != std::ptr::null_mut() {
+            Some(LydNode::from(node))
+        } else {
+            None
+        }
+    }
+
+}
+
+
