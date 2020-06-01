@@ -4,7 +4,6 @@
 //
 
 use std::env;
-use std::os::raw::c_void;
 
 use sysrepo::*;
 
