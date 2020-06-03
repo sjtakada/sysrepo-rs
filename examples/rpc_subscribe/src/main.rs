@@ -55,7 +55,7 @@ fn run() -> bool {
     };
 
     // Callback function.
-    let f = |_id: u32, _op_path: &str, _inputs: &[sr_val_t],
+    let f = |_id: u32, _op_path: &str, _inputs: SysrepoValues,
              _event: sr_event_t, _request_id: u32| -> Vec<sr_val_t>
     {
         let mut vec = Vec::new();

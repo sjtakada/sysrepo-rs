@@ -457,8 +457,7 @@ impl SysrepoSession {
                             callback: F, _private_data: *mut c_void,
                             priority: u32, opts: sr_subscr_options_t)
                             -> Result<&mut SysrepoSubscription, i32>
-    where F: FnMut(u32, &str, &[sr_val_t],
-                   sr_event_t, u32) -> Vec<sr_val_t> + 'static,
+    where F: FnMut(u32, &str, SysrepoValues, sr_event_t, u32) -> Vec<sr_val_t> + 'static,
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -495,14 +494,14 @@ impl SysrepoSession {
         output: *mut *mut sr_val_t,
         output_cnt: *mut u64,
         private_data: *mut c_void) -> i32
-    where F: FnMut(u32, &str, &[sr_val_t],
+    where F: FnMut(u32, &str, SysrepoValues,
                    sr_event_t, u32) -> Vec<sr_val_t>,
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let op_path: &CStr = CStr::from_ptr(op_path);
-        let inputs: &[sr_val_t] = slice::from_raw_parts(input, input_cnt as usize);
+        let inputs = SysrepoValues::from(input as *mut sr_val_t, input_cnt, false);
 
         let vec = callback(sr_session_get_id(sess), op_path.to_str().unwrap(), inputs, event, request_id);
         *output = libc::malloc(mem::size_of::<sr_val_t>() * vec.len()) as *mut sr_val_t;
