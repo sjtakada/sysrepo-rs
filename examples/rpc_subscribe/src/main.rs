@@ -26,7 +26,6 @@ fn main() {
     }
 }
 
-/// Main.
 fn run() -> bool {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -41,7 +40,7 @@ fn run() -> bool {
     println!(r#"Application will subscribe "{}" RPC."#, path);
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Debug);
+    Sysrepo::log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
     let mut sr = match Sysrepo::new(0) {

@@ -338,10 +338,7 @@ impl SysrepoSession {
     }
 
     pub fn apply_changes(&mut self, timeout: Option<Duration>, wait: bool) -> Result<(), i32> {
-        let timeout_ms = match timeout {
-            Some(timeout) => timeout.as_millis() as u32,
-            None => 0,
-        };
+        let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
 
         let rc = unsafe {
             sr_apply_changes(self.sess, timeout_ms, if wait { 1 } else { 0 })
@@ -477,6 +474,41 @@ impl SysrepoSession {
             Err(rc)
         } else {
             Ok(())
+        }
+    }
+
+    pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
+                    timeout: Option<Duration>) -> Result<Vec<sr_val_t>, i32> {
+        let path = &path[..] as *const _ as *mut i8;
+        let (input, input_cnt) = match input {
+            Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
+            None => (std::ptr::null_mut(), 0)
+        };
+        let timeout = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
+
+        let mut output: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
+        let mut output_count: u64 = 0;
+
+        let rc = unsafe {
+            sr_rpc_send(self.sess, path, input, input_cnt, timeout,
+                        &mut output, &mut output_count)
+        };
+
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            let slice: &[sr_val_t] = unsafe { slice::from_raw_parts(output, output_count as usize) };
+            let mut vec = Vec::new();
+
+            for v in slice {
+                vec.push(*v);
+            }
+
+            unsafe {
+//                sr_free_values(output, output_count);
+            }
+
+            Ok(vec)
         }
     }
 }
