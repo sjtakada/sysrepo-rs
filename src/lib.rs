@@ -170,6 +170,59 @@ pub enum LydAnyDataValueType {
     Lybd = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_LYBD as isize,
 }
 
+/// Sysrepo Value Slice.
+pub struct SysrepoValues {
+
+    /// Pointer to raw sr_val_t array.
+    values: *mut sr_val_t,
+
+    /// Number of values.
+    len: u64,
+
+    /// Owned flag.
+    owned: bool,
+}
+
+impl SysrepoValues {
+
+    pub fn new() -> Self {
+        Self {
+            values: std::ptr::null_mut(),
+            len: 0,
+            owned: false,
+        }
+    }
+
+    pub fn from(values: *mut sr_val_t, len: u64, owned: bool) -> Self {
+        Self {
+            values: values,
+            len: len,
+            owned: owned,
+        }
+    }
+
+    pub fn as_slice(&mut self) -> &[sr_val_t] {
+        unsafe {
+            slice::from_raw_parts(self.values, self.len as usize)
+        }
+    }
+
+    pub fn set_owned(&mut self) {
+        self.owned = true;
+    }
+}
+
+impl Drop for SysrepoValues {
+
+    fn drop (&mut self) {
+        if self.owned {
+            unsafe {
+                sr_free_values(self.values, self.len);
+            }
+        }
+    }
+}
+
 /// Sysrepo.
 pub struct Sysrepo {
 
@@ -478,7 +531,7 @@ impl SysrepoSession {
     }
 
     pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
-                    timeout: Option<Duration>) -> Result<Vec<sr_val_t>, i32> {
+                    timeout: Option<Duration>) -> Result<SysrepoValues, i32> {
         let path = &path[..] as *const _ as *mut i8;
         let (input, input_cnt) = match input {
             Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
@@ -497,18 +550,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let slice: &[sr_val_t] = unsafe { slice::from_raw_parts(output, output_count as usize) };
-            let mut vec = Vec::new();
-
-            for v in slice {
-                vec.push(*v);
-            }
-
-            unsafe {
-//                sr_free_values(output, output_count);
-            }
-
-            Ok(vec)
+            Ok(SysrepoValues::from(output, output_count, true))
         }
     }
 }

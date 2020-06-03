@@ -56,45 +56,13 @@ fn run() -> bool {
 
     // Send the RPC.
     match sess.rpc_send(&path, None, None) {
-        Ok(vec) => {
-            for v in vec {
+        Ok(mut sr_values) => {
+            for v in sr_values.as_slice() {
                 print_val(&v);
             }
         }
         Err(_) => return false,
     };
-
-
-/*
-    let mut output_count: u64 = 0;
-    let mut output: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
-
-    // Send the RPC.
-    unsafe {
-        let path = &path[..] as *const _ as *const i8;
-
-        rc = sr_rpc_send(
-            session,
-            path,
-            null_ptr as *const sr_val_t,
-            0,
-            0,
-            &mut output,
-            &mut output_count,
-        );
-        if rc != sr_error_e_SR_ERR_OK as i32 {
-            break;
-        }
-    }
-    // Print the values.
-    unsafe {
-        let vals: &[sr_val_t] = slice::from_raw_parts(output, output_count as usize);
-
-        for i in 0..vals.len() {
-            print_val(&vals[i]);
-        }
-    }
-*/
 
     true
 }
