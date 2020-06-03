@@ -53,7 +53,6 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-
     // Send the RPC.
     match sess.rpc_send(&path, None, None) {
         Ok(mut sr_values) => {

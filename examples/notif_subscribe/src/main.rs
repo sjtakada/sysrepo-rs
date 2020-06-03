@@ -65,7 +65,7 @@ fn run() -> bool {
 
     // Callback function.
     let f = |_id: u32, _notif_type:sr_ev_notif_type_t,
-             path: &str, vals: &[sr_val_t], _timestamp: time_t|
+             path: &str, mut values: SysrepoValues, _timestamp: time_t|
     {
         println!("");
         println!("");
@@ -74,8 +74,8 @@ fn run() -> bool {
         );
         println!("");
 
-        for i in 0..vals.len() {
-            print_val(&vals[i]);
+        for v in values.as_slice() {
+            print_val(&v);
         }
     };
 

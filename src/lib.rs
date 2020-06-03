@@ -409,7 +409,7 @@ impl SysrepoSession {
                                     opts: sr_subscr_options_t)
                                     -> Result<&mut SysrepoSubscription, i32>
     where F: FnMut(u32, sr_ev_notif_type_t, &str,
-                   &[sr_val_t], time_t) + 'static,
+                   SysrepoValues, time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
         let xpath = xpath.map_or(std::ptr::null_mut(),
@@ -442,15 +442,15 @@ impl SysrepoSession {
         timestamp: time_t,
         private_data: *mut c_void)
     where F: FnMut(u32, sr_ev_notif_type_t,
-                   &str, &[sr_val_t], time_t),
+                   &str, SysrepoValues, time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let path: &CStr = CStr::from_ptr(path);
-        let vals: &[sr_val_t] = slice::from_raw_parts(values, values_cnt as usize);
+        let sr_values = SysrepoValues::from(values as *mut sr_val_t, values_cnt, false);
 
-        callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), vals, timestamp);
+        callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), sr_values, timestamp);
     }
 
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
