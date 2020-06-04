@@ -39,6 +39,7 @@ pub enum SrError {
 }
 
 /// Log level.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrLogLevel {
     None = sr_log_level_t_SR_LL_NONE as isize,
     Error = sr_log_level_t_SR_LL_ERR as isize,
@@ -48,6 +49,7 @@ pub enum SrLogLevel {
 }
 
 /// Conn Flag.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrConnFlag {
     Default = sr_conn_flag_e_SR_CONN_DEFAULT as isize,
     CacheRunning = sr_conn_flag_e_SR_CONN_CACHE_RUNNING as isize,
@@ -56,6 +58,7 @@ pub enum SrConnFlag {
 }
 
 /// Datastore.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrDatastore {
     Startup = sr_datastore_e_SR_DS_STARTUP as isize,
     Running = sr_datastore_e_SR_DS_RUNNING as isize,
@@ -64,6 +67,7 @@ pub enum SrDatastore {
 }
 
 /// Sysrepo Type.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrType {
     Unknown = sr_type_e_SR_UNKNOWN_T as isize,
     List = sr_type_e_SR_LIST_T as isize,
@@ -92,6 +96,7 @@ pub enum SrType {
 }
 
 /// Get Oper Flag.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrGetOperFlag {
     Default = sr_get_oper_flag_e_SR_OPER_DEFAULT as isize,
     NoState = sr_get_oper_flag_e_SR_OPER_NO_STATE as isize,
@@ -102,6 +107,7 @@ pub enum SrGetOperFlag {
 }
 
 /// Edit Flag.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrEditFlag {
     Default = sr_edit_flag_e_SR_EDIT_DEFAULT as isize,
     NonRecursive = sr_edit_flag_e_SR_EDIT_NON_RECURSIVE as isize,
@@ -110,6 +116,7 @@ pub enum SrEditFlag {
 }
 
 /// Move Position.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrMovePosition {
     Before = sr_move_position_e_SR_MOVE_BEFORE as isize,
     After = sr_move_position_e_SR_MOVE_AFTER as isize,
@@ -118,6 +125,7 @@ pub enum SrMovePosition {
 }
 
 /// Subscribe Flag.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrSubcribeFlag {
     Default = sr_subscr_flag_e_SR_SUBSCR_DEFAULT as isize,
     CtxReuse = sr_subscr_flag_e_SR_SUBSCR_CTX_REUSE as isize,
@@ -131,6 +139,7 @@ pub enum SrSubcribeFlag {
 }
 
 /// Event.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrEvent {
     Update = sr_event_e_SR_EV_UPDATE as isize,
     Change = sr_event_e_SR_EV_CHANGE as isize,
@@ -141,6 +150,7 @@ pub enum SrEvent {
 }
 
 /// Change Oper.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrChangeOper {
     Created = sr_change_oper_e_SR_OP_CREATED as isize,
     Modified = sr_change_oper_e_SR_OP_MODIFIED as isize,
@@ -149,6 +159,7 @@ pub enum SrChangeOper {
 }
 
 /// Notification Type.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrNotifType {
     Relative = sr_ev_notif_type_e_SR_EV_NOTIF_REALTIME as isize,
     Replay = sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY as isize,
@@ -157,7 +168,7 @@ pub enum SrNotifType {
 }
 
 /// Lyd Anydata Value Type.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum LydAnyDataValueType {
     ConstString = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_CONSTSTRING as isize,
     String = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_STRING as isize,
@@ -409,6 +420,22 @@ impl SysrepoSession {
 
     pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SysrepoSubscription> {
         self.subscrs.get_mut(&id)
+    }
+
+    pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SysrepoValues, i32> {
+        let xpath = &xpath[..] as *const _ as *const i8;
+        let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
+        let mut values_count: u64 = 0;
+        let mut values: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
+
+        let rc = unsafe {
+            sr_get_items(self.sess, xpath, timeout_ms, opts, &mut values, &mut values_count)
+        };
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(SysrepoValues::from(values, values_count, true))
+        }
     }
 
     pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
