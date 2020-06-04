@@ -12,6 +12,7 @@ use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::time::Duration;
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::collections::HashMap;
 
 use libc;
@@ -176,6 +177,9 @@ pub struct SysrepoValues {
     /// Pointer to raw sr_val_t array.
     values: *mut sr_val_t,
 
+    /// Allocated size.
+    capacity: u64,
+
     /// Number of values.
     len: u64,
 
@@ -185,20 +189,33 @@ pub struct SysrepoValues {
 
 impl SysrepoValues {
 
-    pub fn new() -> Self {
+    pub fn new(capacity: u64, owned: bool) -> Self {
         Self {
-            values: std::ptr::null_mut(),
-            len: 0,
-            owned: false,
+            values: unsafe {
+                libc::malloc(mem::size_of::<sr_val_t>() * capacity as usize) as *mut sr_val_t
+            },
+            capacity: capacity,
+            len: capacity,
+            owned: owned,
         }
     }
 
     pub fn from(values: *mut sr_val_t, len: u64, owned: bool) -> Self {
         Self {
             values: values,
+            capacity: len,
             len: len,
             owned: owned,
         }
+    }
+
+    pub fn at_mut(&mut self, index: usize) -> &mut sr_val_t {
+        let mut slice =
+        unsafe {
+            slice::from_raw_parts_mut(self.values, self.capacity as usize)
+        };
+
+        &mut slice[index]
     }
 
     pub fn as_slice(&mut self) -> &[sr_val_t] {
@@ -207,8 +224,29 @@ impl SysrepoValues {
         }
     }
 
+    pub fn as_ptr(&self) -> *mut sr_val_t {
+        self.values
+    }
+
+    pub fn len(&self) -> u64 {
+        self.len
+    }
+
     pub fn set_owned(&mut self) {
         self.owned = true;
+    }
+
+    pub fn set_int64_value(&mut self, index: usize, dflt: bool, xpath: &str, value: i64) {
+        let xpath = CString::new(xpath).unwrap();
+        let xpath_ptr = xpath.as_ptr();
+
+        let mut val = self.at_mut(index) as *mut sr_val_t;
+        unsafe {
+            (*val).xpath = libc::strdup(xpath_ptr);
+            (*val).type_ = sr_type_e_SR_INT64_T;
+            (*val).dflt = dflt;
+            (*val).data.int64_val = value;
+        }
     }
 }
 
@@ -457,7 +495,7 @@ impl SysrepoSession {
                             callback: F, _private_data: *mut c_void,
                             priority: u32, opts: sr_subscr_options_t)
                             -> Result<&mut SysrepoSubscription, i32>
-    where F: FnMut(u32, &str, SysrepoValues, sr_event_t, u32) -> Vec<sr_val_t> + 'static,
+    where F: FnMut(u32, &str, SysrepoValues, sr_event_t, u32) -> SysrepoValues + 'static,
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -495,7 +533,7 @@ impl SysrepoSession {
         output_cnt: *mut u64,
         private_data: *mut c_void) -> i32
     where F: FnMut(u32, &str, SysrepoValues,
-                   sr_event_t, u32) -> Vec<sr_val_t>,
+                   sr_event_t, u32) -> SysrepoValues
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
@@ -503,17 +541,9 @@ impl SysrepoSession {
         let op_path: &CStr = CStr::from_ptr(op_path);
         let inputs = SysrepoValues::from(input as *mut sr_val_t, input_cnt, false);
 
-        let vec = callback(sr_session_get_id(sess), op_path.to_str().unwrap(), inputs, event, request_id);
-        *output = libc::malloc(mem::size_of::<sr_val_t>() * vec.len()) as *mut sr_val_t;
-        let ptr: *mut *mut sr_val_t = output;
-
-        for i in 0..vec.len() {
-            unsafe {
-                let val = vec[i];
-                std::ptr::copy(&val, (*ptr).offset(i as isize), 1);
-            }
-        }
-        *output_cnt = vec.len() as u64;
+        let sr_output = callback(sr_session_get_id(sess), op_path.to_str().unwrap(), inputs, event, request_id);
+        *output = sr_output.as_ptr();
+        *output_cnt = sr_output.len();
 
         sr_error_e_SR_ERR_OK as i32
     }
