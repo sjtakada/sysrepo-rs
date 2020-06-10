@@ -575,6 +575,75 @@ impl SysrepoSession {
         sr_error_e_SR_ERR_OK as i32
     }
 
+    pub fn oper_get_items_subscribe<F>(&mut self, mod_name: &str, path: &str,
+                                       callback: F, opts: sr_subscr_options_t)
+                                       -> Result<&mut SysrepoSubscription, i32>
+    where F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode> + 'static,
+    {
+        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let data = Box::into_raw(Box::new(callback));
+        let mod_name = &mod_name[..] as *const _ as *mut i8;
+        let path = &path[..] as *const _ as *mut i8;
+
+        let rc = unsafe {
+            sr_oper_get_items_subscribe(
+                self.sess,
+                mod_name,
+                path,
+                Some(SysrepoSession::call_get_items::<F>),
+                data as *mut _,
+                opts,
+                &mut subscr)
+        };
+
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            Ok(self.subscrs.get_mut(&id).unwrap())
+        }
+    }
+
+    unsafe extern "C" fn call_get_items<F>(
+        sess: *mut sr_session_ctx_t,
+        mod_name: *const c_char,
+        path: *const c_char,
+        request_xpath: *const c_char,
+        request_id: u32,
+        parent: *mut *mut lyd_node,
+        private_data: *mut c_void) -> i32
+    where F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode>
+    {
+        let callback_ptr = private_data as *mut F;
+        let callback = &mut *callback_ptr;
+
+        let ctx = sr_get_context(sr_session_get_connection(sess));
+
+        let mod_name: &CStr = CStr::from_ptr(mod_name);
+        let path: &CStr = CStr::from_ptr(path);
+        let request_xpath = if request_xpath == std::ptr::null_mut() {
+            None
+        } else {
+            Some(CStr::from_ptr(request_xpath).to_str().unwrap())
+        };
+
+        let ctx = LibYangCtx::from(ctx);
+        let node = callback(&ctx,
+                            mod_name.to_str().unwrap(),
+                            path.to_str().unwrap(),
+                            request_xpath,
+                            request_id);
+
+        match node {
+            Some(node) => {
+                *parent = node.get_node();
+            }
+            None => {}
+        }
+
+        sr_error_e_SR_ERR_OK as i32
+    }
+
     pub fn event_notif_send_tree(&mut self, notif: &LydNode) -> Result<(), i32> {
         let rc = unsafe {
             sr_event_notif_send_tree(self.sess, notif.get_node())
@@ -680,6 +749,12 @@ pub struct LydNode {
 
     /// Raw pointer to LibYang data node.
     node: *mut lyd_node,
+
+    /// Value.
+    value: Option<LydValue>,
+
+//    /// Path.
+//    path: String,
 }
 
 impl LydNode {
@@ -687,12 +762,18 @@ impl LydNode {
     pub fn from(node: *mut lyd_node) -> Self {
         Self {
             node: node,
+            value: None,
+//            path: String::new(),
         }
     }
 
     pub fn get_node(&self) -> *mut lyd_node {
         self.node
     }
+
+//    pub fn get_path(&self) -> *const i8 {
+//        self.path.as_ptr() as *const _ as *const i8
+//    }
 
     pub fn free_withsiblings(&self) {
         unsafe {
@@ -708,19 +789,26 @@ pub struct LydValue {
 
     /// TBD: It is string for now.
     ///      It has to be variable length of byte array.
-    value: String,
+    value: CString,
 }
 
 impl LydValue {
 
-    pub fn from_string(s: String) -> Self {
+//    pub fn from_string(s: CString) -> Self {
+//        Self {
+//            value_type: LydAnyDataValueType::ConstString,
+//            value: s.clone(),
+//        }
+//    }
+
+    pub fn from_str(s: &str) -> Self {
         Self {
             value_type: LydAnyDataValueType::ConstString,
-            value: s.clone(),
+            value: CString::new(s).unwrap(),
         }
     }
 
-    pub fn get_value(&self) -> &str {
+    pub fn get_value(&self) -> &CStr {
         &self.value
     }
 
@@ -740,36 +828,33 @@ pub struct LibYang {
 
 impl LibYang {
 
-    pub fn lyd_new_path(node: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
-                        path: &str, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
+    pub fn lyd_new_path(parent: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
+                        path: &CStr, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
 
-        let node = node.map_or(std::ptr::null_mut(), |node| node.get_node());
+        let parent = parent.map_or(std::ptr::null_mut(), |parent| parent.get_node());
         let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| ly_ctx.get_ctx() as *mut ly_ctx);
-        let path = &path[..] as *const _ as * const i8;
-        let node = match value {
-            Some(value) => {
-                let value_type = value.get_type();
-                let value = String::from(value.get_value());
-                let value = &value[..] as *const _ as *mut c_void;
+        let path = path.as_ptr() as *const _ as * const i8;
 
-                unsafe {
-                    lyd_new_path(node, ctx, path, value, value_type as u32, options)
-                }
+        match value {
+            Some(value) => {
+                let node = unsafe {
+                    lyd_new_path(parent, ctx, path, value.get_value_raw(),
+                                 value.get_type() as u32, options)
+                };
+
+                let mut node = LydNode::from(node);
+                Some(node)
             }
             None => {
-                unsafe {
-                    lyd_new_path(node, ctx, path, std::ptr::null_mut(),
+                let node = unsafe {
+                    lyd_new_path(parent, ctx, path, std::ptr::null_mut(),
                                  LydAnyDataValueType::ConstString as u32, options)
-                }
-            }
-        };
-        // Value type fallbacks to ConstString, is it OK?
+                };
 
-        if node != std::ptr::null_mut() {
-            Some(LydNode::from(node))
-        } else {
-            None
+                Some(LydNode::from(node))
+            }
         }
+        // Value type fallbacks to ConstString, is it OK?
     }
 }
 
