@@ -68,9 +68,9 @@ fn run() -> bool {
 
         if mod_name == "examples" && path == "/examples:stats" {
             let path1 = String::from("/examples:stats/counter");
-            let val1 = LydValue::from_str("852");
+            let val1 = LydValue::from_string("852".to_string());
             let path2 = String::from("/examples:stats/counter2");
-            let val2 = LydValue::from_str("1052");
+            let val2 = LydValue::from_string("1052".to_string());
 
             let parent = LibYang::lyd_new_path(None, Some(ctx), &path1, Some(&val1), 0).unwrap();
             LibYang::lyd_new_path(Some(&parent), None, &path2, Some(&val2), 0);

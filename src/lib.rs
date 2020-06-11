@@ -7,7 +7,6 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 use std::slice;
 use std::mem;
 use std::mem::zeroed;
-use std::mem::size_of;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::time::Duration;
@@ -221,8 +220,7 @@ impl SysrepoValues {
     }
 
     pub fn at_mut(&mut self, index: usize) -> &mut sr_val_t {
-        let mut slice =
-        unsafe {
+        let slice = unsafe {
             slice::from_raw_parts_mut(self.values, self.capacity as usize)
         };
 
@@ -776,7 +774,7 @@ pub struct LydValue {
 
 impl LydValue {
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_string(s: String) -> Self {
         Self {
             value_type: LydAnyDataValueType::ConstString,
             value: CString::new(s).unwrap(),
@@ -809,7 +807,6 @@ impl LibYang {
         let parent = parent.map_or(std::ptr::null_mut(), |parent| parent.get_node());
         let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| ly_ctx.get_ctx() as *mut ly_ctx);
         let path = CString::new(path).unwrap();
-
         let path = path.as_ptr() as *const _ as * const i8;
 
         match value {
@@ -819,8 +816,7 @@ impl LibYang {
                                  value.get_type() as u32, options)
                 };
 
-                let mut node = LydNode::from(node);
-                Some(node)
+                Some(LydNode::from(node))
             }
             None => {
                 let node = unsafe {
