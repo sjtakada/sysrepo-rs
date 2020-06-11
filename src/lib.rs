@@ -804,10 +804,12 @@ pub struct LibYang {
 impl LibYang {
 
     pub fn lyd_new_path(parent: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
-                        path: &CStr, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
+                        path: &str, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
 
         let parent = parent.map_or(std::ptr::null_mut(), |parent| parent.get_node());
         let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| ly_ctx.get_ctx() as *mut ly_ctx);
+        let path = CString::new(path).unwrap();
+
         let path = path.as_ptr() as *const _ as * const i8;
 
         match value {

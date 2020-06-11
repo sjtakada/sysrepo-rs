@@ -7,8 +7,6 @@ use std::env;
 use std::thread;
 use std::time;
 
-use std::ffi::CString;
-
 use sysrepo::*;
 use utils::*;
 
@@ -69,16 +67,15 @@ fn run() -> bool {
         println!("");
 
         if mod_name == "examples" && path == "/examples:stats" {
-            let path1 = CString::new("/examples:stats/counter").unwrap();
+            let path1 = String::from("/examples:stats/counter");
             let val1 = LydValue::from_str("852");
-            let path2 = CString::new("/examples:stats/counter2").unwrap();
+            let path2 = String::from("/examples:stats/counter2");
             let val2 = LydValue::from_str("1052");
 
             let parent = LibYang::lyd_new_path(None, Some(ctx), &path1, Some(&val1), 0).unwrap();
             LibYang::lyd_new_path(Some(&parent), None, &path2, Some(&val2), 0);
 
             Some(parent)
-
         } else {
             None
         }
