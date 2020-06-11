@@ -712,16 +712,6 @@ impl SysrepoSubscription {
     }
 }
 
-/*
-impl Drop for SysrepoSubscription {
-    fn drop (&mut self) {
-        unsafe {
-
-        }
-    }
-}
-*/
-
 /// Lib Yang Context.
 ///  It just holds raw pointer, but does not own the object.
 pub struct LibYangCtx {
@@ -752,9 +742,6 @@ pub struct LydNode {
 
     /// Value.
     value: Option<LydValue>,
-
-//    /// Path.
-//    path: String,
 }
 
 impl LydNode {
@@ -763,17 +750,12 @@ impl LydNode {
         Self {
             node: node,
             value: None,
-//            path: String::new(),
         }
     }
 
     pub fn get_node(&self) -> *mut lyd_node {
         self.node
     }
-
-//    pub fn get_path(&self) -> *const i8 {
-//        self.path.as_ptr() as *const _ as *const i8
-//    }
 
     pub fn free_withsiblings(&self) {
         unsafe {
@@ -793,13 +775,6 @@ pub struct LydValue {
 }
 
 impl LydValue {
-
-//    pub fn from_string(s: CString) -> Self {
-//        Self {
-//            value_type: LydAnyDataValueType::ConstString,
-//            value: s.clone(),
-//        }
-//    }
 
     pub fn from_str(s: &str) -> Self {
         Self {

@@ -6,7 +6,6 @@
 use std::env;
 use std::thread;
 use std::time;
-use std::sync::Arc;
 
 use std::ffi::CString;
 
@@ -56,16 +55,11 @@ fn run() -> bool {
         Err(_) => return false,
     };
 
-    // Get Lib Yang Context from sysrepo connection.
-    //let mut ly_ctx = Arc::new(sr.get_context());
-
     // Callback
     let f = |ctx: &LibYangCtx, mod_name: &str,
              path: &str, _request_xpath: Option<&str>,
              _request_id: u32| -> Option<LydNode>
     {
-//        let ctx = Arc::get_mut(&mut ly_ctx).unwrap();
-
         println!("");
         println!("");
         println!(
@@ -97,10 +91,9 @@ fn run() -> bool {
     };
 
     // Subscribe for the providing the operational data.
-    let subscr = match sess.oper_get_items_subscribe(&mod_name, &path, f, 0) {
-        Ok(subscr) => subscr,
-        Err(_) => return false,
-    };
+    if let Err(_) = sess.oper_get_items_subscribe(&mod_name, &path, f, 0) {
+        return false;
+    }
 
     println!("\n\n ========== LISTENING FOR REQUESTS ==========\n");
 
