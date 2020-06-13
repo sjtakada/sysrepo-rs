@@ -5,11 +5,11 @@
 
 use std::env;
 use std::ffi::CStr;
-use std::ffi::CString;
-use std::mem::zeroed;
-use std::os::raw::c_char;
-use std::os::raw::c_void;
-use std::slice;
+//use std::ffi::CString;
+//use std::mem::zeroed;
+//use std::os::raw::c_char;
+//use std::os::raw::c_void;
+//use std::slice;
 use std::thread;
 use std::time;
 
@@ -55,13 +55,21 @@ fn print_change(op: sr_change_oper_t, old_val: *mut sr_val_t, new_val: *mut sr_v
 }
 
 /// Print current config.
-fn print_current_config(session: *mut sr_session_ctx_t, module_name: &str) {
-    let mut values: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
-    let mut count: u64 = 0;
-    let rc;
-    let xpath = format!("/{}:*//.", module_name);
+fn print_current_config(sess: &mut SysrepoSession, mod_name: &str) {
+    let xpath = format!("/{}:*//.", mod_name);
+    let xpath = &xpath[..];// as *const _ as *const i8;
 
-    let xpath = &xpath[..] as *const _ as *const i8;
+    // Get the values.
+    match sess.get_items(&xpath, None, 0) {
+        Err(_) => {
+        }
+        Ok(mut values) => {
+            for v in values.as_slice() {
+                print_val(&v);
+            }
+        }
+    }
+/*
     unsafe {
         rc = sr_get_items(session, xpath, 0, 0, &mut values, &mut count);
         if rc != sr_error_e_SR_ERR_OK as i32 {
@@ -76,8 +84,10 @@ fn print_current_config(session: *mut sr_session_ctx_t, module_name: &str) {
             print_val(&vals[i]);
         }
     }
+*/
 }
 
+/*
 /// Module change callback.
 extern "C" fn module_change_cb(
     session: *mut sr_session_ctx_t,
@@ -132,7 +142,7 @@ extern "C" fn module_change_cb(
             println!("");
             println!(" ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========");
             println!("");
-            print_current_config(session, module_name.to_str().unwrap());
+//            print_current_config(session, module_name.to_str().unwrap());
         }
 
         break;
@@ -144,9 +154,18 @@ extern "C" fn module_change_cb(
 
     sr_error_e_SR_ERR_OK as i32
 }
+*/
 
 /// Main.
 fn main() {
+    if run() {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn run() -> bool {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
@@ -154,12 +173,6 @@ fn main() {
         print_help(&program);
         std::process::exit(1);
     }
-
-    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
-    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut subscription: *mut sr_subscription_ctx_t =
-        unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
-    let mut rc;
 
     let mod_name = args[1].clone();
 
@@ -173,79 +186,59 @@ fn main() {
     );
 
     // Turn logging on.
-    unsafe {
-        sr_log_stderr(sr_log_level_t_SR_LL_WRN);
-    }
+    Sysrepo::log_stderr(SrLogLevel::Warn);
 
-    loop {
-        let null_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+    // Connect to sysrepo.
+    let mut sr = match Sysrepo::new(0) {
+        Ok(sr) => sr,
+        Err(_) => return false,
+    };
 
-        // Connect to sysrepo.
-        unsafe {
-            rc = sr_connect(0, &mut conn);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
+    // Start session.
+    let mut sess = match sr.start_session(SrDatastore::Running) {
+        Ok(sess) => sess,
+        Err(_) => return false,
+    };
 
-        // Start session.
-        unsafe {
-            rc = sr_session_start(conn, sr_datastore_e_SR_DS_RUNNING, &mut session);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
+    // Read current config.
+    println!("");
+    println!(" ========== READING RUNNING CONFIG: ==========");
+    println!("");
+    print_current_config(&mut sess, &mod_name);
 
-        // Read current config.
-        println!("");
-        println!(" ========== READING RUNNING CONFIG: ==========");
-        println!("");
-        print_current_config(session, &mod_name);
 
-        // Subscribe for changes in running config.
-        unsafe {
-            let mod_name = &mod_name[..] as *const _ as *const i8;
-            let xpath = if args.len() == 3 {
-                let xpath = args[2].clone();
-                &xpath[..] as *const _ as *mut i8
-            } else {
-                null_ptr as *const i8
-            };
-
-            rc = sr_module_change_subscribe(
-                session,
-                mod_name,
-                xpath,
-                Some(module_change_cb),
-                null_ptr,
-                0,
-                0,
-                &mut subscription,
-            );
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        println!("\n\n ========== LISTENING FOR CHANGES ==========\n");
-
-        signal_init();
-        while !is_sigint_caught() {
-            thread::sleep(time::Duration::from_secs(1));
-        }
-
-        println!("Application exit requested, exiting.");
-
-        break;
-    }
-
-    unsafe {
-        sr_disconnect(conn);
-    }
-
-    if rc == 0 {
-        std::process::exit(0);
+    let xpath = args[2].clone();
+    let xpath = if args.len() == 3 {
+        Some(&xpath[..])
     } else {
-        std::process::exit(1);
+        None
+    };
+
+    let sess_clone = sess.clone();
+
+    let f = move |_id: u32, mod_name: &str, path: &str, event: sr_event_t, _request_id: u32| -> ()
+    {
+        let path = "//.";
+
+        let it = match sess_clone.get_changes_iter(&path) {
+            Err(_) => return,
+            Ok(it) => it,
+        };
+    };
+
+    // Subscribe for changes in running config.
+    if let Err(_) = sess.module_change_subscribe(&mod_name, xpath, f, 0, 0) {
+        return false;
     }
+
+    println!("\n\n ========== LISTENING FOR CHANGES ==========\n");
+
+    signal_init();
+    while !is_sigint_caught() {
+        thread::sleep(time::Duration::from_secs(1));
+    }
+
+    println!("Application exit requested, exiting.");
+
+    true
 }

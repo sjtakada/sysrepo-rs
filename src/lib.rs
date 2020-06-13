@@ -181,6 +181,29 @@ pub enum LydAnyDataValueType {
     Lybd = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_LYBD as isize,
 }
 
+/// Single Sysrepo Value.
+pub struct SysrepoVal {
+    value: *mut sr_val_t,
+}
+
+impl SysrepoVal {
+
+    pub fn from(value: *mut sr_val_t) -> Self {
+        Self {
+            value: value
+        }
+    }
+}
+
+impl Drop for SysrepoVal {
+
+    fn drop (&mut self) {
+        unsafe {
+            sr_free_val(self.value);
+        }
+    }
+}
+
 /// Sysrepo Value Slice.
 pub struct SysrepoValues {
 
@@ -374,6 +397,9 @@ pub struct SysrepoSession {
     /// Raw Pointer to session.
     sess: *mut sr_session_ctx_t,
 
+    /// Owned flag.
+    owned: bool,
+
     /// Incremental subscription ID.
     id: usize,
 
@@ -387,6 +413,7 @@ impl SysrepoSession {
     pub fn new() -> Self {
         Self {
             sess: std::ptr::null_mut(),
+            owned: true,
             id: 0,
             subscrs: HashMap::new(),
         }
@@ -395,6 +422,17 @@ impl SysrepoSession {
     pub fn from(sess: *mut sr_session_ctx_t) -> Self {
         Self {
             sess: sess,
+            owned: true,
+            id: 0,
+            subscrs: HashMap::new(),
+        }
+    }
+
+    /// Create weak clone.
+    pub fn clone(&self) -> Self {
+        Self {
+            sess: self.sess,
+            owned: false,
             id: 0,
             subscrs: HashMap::new(),
         }
@@ -642,6 +680,73 @@ impl SysrepoSession {
         sr_error_e_SR_ERR_OK as i32
     }
 
+    pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
+                                      callback: F, priority: u32, opts: sr_subscr_options_t)
+                                      -> Result<&mut SysrepoSubscription, i32>
+    where F: FnMut(u32, &str, &str, sr_event_t, u32) -> () + 'static
+    {
+        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let data = Box::into_raw(Box::new(callback));
+        let mod_name = &mod_name[..] as *const _ as *mut i8;
+        let path = path.map_or(std::ptr::null_mut(), |path| &path[..] as *const _ as *mut i8);
+
+        let rc = unsafe {
+            sr_module_change_subscribe(
+                self.sess,
+                mod_name,
+                path,
+                Some(SysrepoSession::call_module_change::<F>),
+                data as *mut _,
+                priority,
+                opts,
+                &mut subscr)
+        };
+
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            Ok(self.subscrs.get_mut(&id).unwrap())
+        }
+    }
+
+    unsafe extern "C" fn call_module_change<F>(
+        sess: *mut sr_session_ctx_t,
+        mod_name: *const c_char,
+        path: *const c_char,
+        event: sr_event_t,
+        request_id: u32,
+        private_data: *mut c_void) -> i32
+    where F: FnMut(u32, &str, &str, sr_event_t, u32) -> ()
+    {
+        let callback_ptr = private_data as *mut F;
+        let callback = &mut *callback_ptr;
+
+        let mod_name: &CStr = CStr::from_ptr(mod_name);
+        let path: &CStr = CStr::from_ptr(path);
+
+        callback(sr_session_get_id(sess), mod_name.to_str().unwrap(),
+                 path.to_str().unwrap(), event, request_id);
+
+        sr_error_e_SR_ERR_OK as i32
+    }
+
+    pub fn get_changes_iter(&self, path: &str) -> Result<SysrepoChangeIter, i32> {
+        let mut it = unsafe { zeroed::<*mut sr_change_iter_t>() };
+        let rc = unsafe {
+            let path = CString::new(path).unwrap();
+            let path = path.as_ptr() as *const i8;
+
+            sr_get_changes_iter(self.sess, path, &mut it)
+        };
+
+        if rc != SrError::Ok as i32 {
+            Err(rc)
+        } else {
+            Ok(SysrepoChangeIter::from(it))
+        }
+    }
+
     pub fn event_notif_send_tree(&mut self, notif: &LydNode) -> Result<(), i32> {
         let rc = unsafe {
             sr_event_notif_send_tree(self.sess, notif.get_node())
@@ -682,8 +787,10 @@ impl Drop for SysrepoSession {
     fn drop (&mut self) {
         self.subscrs.drain();
 
-        unsafe {
-            sr_session_stop(self.sess);
+        if self.owned {
+            unsafe {
+                sr_session_stop(self.sess);
+            }
         }
     }
 }
@@ -709,6 +816,31 @@ impl SysrepoSubscription {
         }
     }
 }
+
+/// Sysrepo Changes Iterator.
+pub struct SysrepoChangeIter {
+
+    /// Raw pointer to iter.
+    iter: *mut sr_change_iter_t,
+}
+
+impl SysrepoChangeIter {
+
+    pub fn from(iter: *mut sr_change_iter_t) -> Self {
+        Self {
+            iter: iter,
+        }
+    }
+}
+
+impl Drop for SysrepoChangeIter {
+    fn drop (&mut self) {
+        unsafe {
+            sr_free_change_iter(self.iter);
+        }
+    }
+}
+
 
 /// Lib Yang Context.
 ///  It just holds raw pointer, but does not own the object.
