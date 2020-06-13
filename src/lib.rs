@@ -13,6 +13,7 @@ use std::time::Duration;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use libc;
 
@@ -164,6 +165,20 @@ pub enum SrNotifType {
     Replay = sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY as isize,
     ReplayComplete = sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY_COMPLETE as isize,
     Stop = sr_ev_notif_type_e_SR_EV_NOTIF_STOP as isize,
+}
+
+impl TryFrom<u32> for SrNotifType {
+    type Error = &'static str;
+
+    fn try_from(t: u32) -> Result<Self, Self::Error> {
+        match t {
+            0 => Ok(SrNotifType::Relative),
+            1 => Ok(SrNotifType::Replay),
+            2 => Ok(SrNotifType::ReplayComplete),
+            3 => Ok(SrNotifType::Stop),
+            _ => Err("Invalid SrNotifType"),
+        }
+    }
 }
 
 /// Lyd Anydata Value Type.
@@ -372,7 +387,7 @@ impl SrConn {
             Err(rc)
         } else {
             let id = sess;
-            self.insert_session(id, SrSession::from(sess));
+            self.insert_session(id, SrSession::from(sess, true));
             Ok(self.sessions.get_mut(&(id as SrSessionId)).unwrap())
         }
     }
@@ -414,10 +429,10 @@ impl SrSession {
         }
     }
 
-    pub fn from(sess: *mut sr_session_ctx_t) -> Self {
+    pub fn from(sess: *mut sr_session_ctx_t, owned: bool) -> Self {
         Self {
             sess: sess,
-            owned: true,
+            owned: owned,
             subscrs: HashMap::new(),
         }
     }
@@ -502,12 +517,10 @@ impl SrSession {
                                     callback: F, _private_data: *mut c_void,
                                     opts: sr_subscr_options_t)
                                     -> Result<&mut SrSubscr, i32>
-    where F: FnMut(u32, sr_ev_notif_type_t, &str,
-                   SrValueSlice, time_t) + 'static,
+    where F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t) + 'static,
     {
-        let mod_name = &mod_name[..] as *const _ as *const i8;
-        let xpath = xpath.map_or(std::ptr::null_mut(),
-                                 |xpath| &xpath[..] as *const _ as *mut i8);
+        let mod_name = mod_name.as_ptr() as *const i8;
+        let xpath = xpath.map_or(std::ptr::null_mut(), |xpath| xpath.as_ptr() as *mut i8);
         let start_time = start_time.unwrap_or(0);
         let stop_time = stop_time.unwrap_or(0);
 
@@ -535,16 +548,20 @@ impl SrSession {
         values_cnt: size_t,
         timestamp: time_t,
         private_data: *mut c_void)
-    where F: FnMut(u32, sr_ev_notif_type_t,
-                   &str, SrValueSlice, time_t),
+    where F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let path: &CStr = CStr::from_ptr(path);
         let sr_values = SrValueSlice::from(values as *mut sr_val_t, values_cnt, false);
+        let sess = SrSession::from(sess, false);
+        let notif_type = match SrNotifType::try_from(notif_type) {
+            Ok(notif_type) => notif_type,
+            Err(err) => panic!(err),
+        };
 
-        callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), sr_values, timestamp);
+        callback(sess, notif_type, path.to_str().unwrap(), sr_values, timestamp);
     }
 
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,

@@ -49,10 +49,10 @@ fn run() -> bool {
     );
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Warn);
+    log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
-    let mut sr = match Sysrepo::new(0) {
+    let mut sr = match SrConn::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };
@@ -64,8 +64,8 @@ fn run() -> bool {
     };
 
     // Callback function.
-    let f = |_id: u32, _notif_type:sr_ev_notif_type_t,
-             path: &str, mut values: SysrepoValues, _timestamp: time_t|
+    let f = |_sess: SrSession, _notif_type: SrNotifType,
+             path: &str, mut values: SrValueSlice, _timestamp: time_t|
     {
         println!("");
         println!("");
