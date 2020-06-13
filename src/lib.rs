@@ -182,11 +182,11 @@ pub enum LydAnyDataValueType {
 }
 
 /// Single Sysrepo Value.
-pub struct SysrepoVal {
+pub struct SrValue {
     value: *mut sr_val_t,
 }
 
-impl SysrepoVal {
+impl SrValue {
 
     pub fn from(value: *mut sr_val_t) -> Self {
         Self {
@@ -195,7 +195,7 @@ impl SysrepoVal {
     }
 }
 
-impl Drop for SysrepoVal {
+impl Drop for SrValue {
 
     fn drop (&mut self) {
         unsafe {
@@ -205,29 +205,26 @@ impl Drop for SysrepoVal {
 }
 
 /// Sysrepo Value Slice.
-pub struct SysrepoValues {
+///  The size of slice cannot change.
+pub struct SrValueSlice {
 
     /// Pointer to raw sr_val_t array.
     values: *mut sr_val_t,
 
-    /// Allocated size.
-    capacity: u64,
-
-    /// Number of values.
+    /// Length of this slice.
     len: u64,
 
     /// Owned flag.
     owned: bool,
 }
 
-impl SysrepoValues {
+impl SrValueSlice {
 
     pub fn new(capacity: u64, owned: bool) -> Self {
         Self {
             values: unsafe {
                 libc::malloc(mem::size_of::<sr_val_t>() * capacity as usize) as *mut sr_val_t
             },
-            capacity: capacity,
             len: capacity,
             owned: owned,
         }
@@ -236,7 +233,6 @@ impl SysrepoValues {
     pub fn from(values: *mut sr_val_t, len: u64, owned: bool) -> Self {
         Self {
             values: values,
-            capacity: len,
             len: len,
             owned: owned,
         }
@@ -244,7 +240,7 @@ impl SysrepoValues {
 
     pub fn at_mut(&mut self, index: usize) -> &mut sr_val_t {
         let slice = unsafe {
-            slice::from_raw_parts_mut(self.values, self.capacity as usize)
+            slice::from_raw_parts_mut(self.values, self.len as usize)
         };
 
         &mut slice[index]
@@ -282,7 +278,7 @@ impl SysrepoValues {
     }
 }
 
-impl Drop for SysrepoValues {
+impl Drop for SrValueSlice {
 
     fn drop (&mut self) {
         if self.owned {
@@ -293,20 +289,20 @@ impl Drop for SysrepoValues {
     }
 }
 
-/// Sysrepo.
-pub struct Sysrepo {
+/// Sysrepo connection.
+pub struct SrConn {
 
     /// Raw Pointer to Connection.
     conn: *mut sr_conn_ctx_t,
 
-    /// Map from sid.sr to SysrepoSession.
-    sessions: HashMap<u32, SysrepoSession>,
+    /// Map from sid.sr to SrSession.
+    sessions: HashMap<u32, SrSession>,
 }
 
-impl Sysrepo {
+impl SrConn {
 
     /// Constructor.
-    pub fn new(opts: sr_conn_options_t) -> Result<Sysrepo, i32> {
+    pub fn new(opts: sr_conn_options_t) -> Result<SrConn, i32> {
         let mut conn = std::ptr::null_mut();
 
         let rc = unsafe {
@@ -316,7 +312,7 @@ impl Sysrepo {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(Sysrepo {
+            Ok(SrConn {
                 conn: conn,
                 sessions: HashMap::new(),
             })
@@ -332,7 +328,7 @@ impl Sysrepo {
     }
 
     /// Add session to map.
-    pub fn insert_session(&mut self, id: u32, sess: SysrepoSession) {
+    pub fn insert_session(&mut self, id: u32, sess: SrSession) {
         self.sessions.insert(id, sess);
     }
 
@@ -342,12 +338,12 @@ impl Sysrepo {
     }
 
     /// Lookup session from map.
-    pub fn lookup_session(&mut self, id: &u32) -> Option<&mut SysrepoSession> {
+    pub fn lookup_session(&mut self, id: &u32) -> Option<&mut SrSession> {
         self.sessions.get_mut(id)
     }
 
     /// Start session.
-    pub fn start_session(&mut self, ds: SrDatastore) -> Result<&mut SysrepoSession, i32> {
+    pub fn start_session(&mut self, ds: SrDatastore) -> Result<&mut SrSession, i32> {
         let mut sess = std::ptr::null_mut();
         let rc = unsafe {
             sr_session_start(self.conn, ds as u32, &mut sess)
@@ -358,7 +354,7 @@ impl Sysrepo {
             let id = unsafe {
                 sr_session_get_id(sess)
             };
-            self.insert_session(id, SysrepoSession::from(sess));
+            self.insert_session(id, SrSession::from(sess));
             Ok(self.sessions.get_mut(&id).unwrap())
         }
     }
@@ -384,7 +380,7 @@ impl Sysrepo {
     }
 }
 
-impl Drop for Sysrepo {
+impl Drop for SrConn {
     fn drop (&mut self) {
         self.sessions.drain();
         self.disconnect();
@@ -392,7 +388,7 @@ impl Drop for Sysrepo {
 }
 
 /// Sysrepo session.
-pub struct SysrepoSession {
+pub struct SrSession {
 
     /// Raw Pointer to session.
     sess: *mut sr_session_ctx_t,
@@ -404,11 +400,11 @@ pub struct SysrepoSession {
     id: usize,
 
     /// Map from raw pointer to subscription.
-    subscrs: HashMap<usize, SysrepoSubscription>,
+    subscrs: HashMap<usize, SrSubscr>,
 }
 
 
-impl SysrepoSession {
+impl SrSession {
 
     pub fn new() -> Self {
         Self {
@@ -438,13 +434,13 @@ impl SysrepoSession {
         }
     }
 
-    pub fn get_id(&self) -> u32 {
-        unsafe {
-            sr_session_get_id(self.sess)
-        }
-    }
+//    pub fn get_id(&self) -> u32 {
+//        unsafe {
+//            sr_session_get_id(self.sess)
+//        }
+//    }
 
-    pub fn insert_subscription(&mut self, subscr: SysrepoSubscription) -> usize {
+    pub fn insert_subscription(&mut self, subscr: SrSubscr) -> usize {
         self.id += 1;
         self.subscrs.insert(self.id, subscr);
         self.id
@@ -454,11 +450,11 @@ impl SysrepoSession {
         self.subscrs.remove(&id);
     }
 
-    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SysrepoSubscription> {
+    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SrSubscr> {
         self.subscrs.get_mut(&id)
     }
 
-    pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SysrepoValues, i32> {
+    pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SrValueSlice, i32> {
         let xpath = &xpath[..] as *const _ as *const i8;
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
         let mut values_count: u64 = 0;
@@ -470,7 +466,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(SysrepoValues::from(values, values_count, true))
+            Ok(SrValueSlice::from(values, values_count, true))
         }
     }
 
@@ -508,9 +504,9 @@ impl SysrepoSession {
                                     start_time: Option<time_t>, stop_time: Option<time_t>,
                                     callback: F, _private_data: *mut c_void,
                                     opts: sr_subscr_options_t)
-                                    -> Result<&mut SysrepoSubscription, i32>
+                                    -> Result<&mut SrSubscr, i32>
     where F: FnMut(u32, sr_ev_notif_type_t, &str,
-                   SysrepoValues, time_t) + 'static,
+                   SrValueSlice, time_t) + 'static,
     {
         let mod_name = &mod_name[..] as *const _ as *const i8;
         let xpath = xpath.map_or(std::ptr::null_mut(),
@@ -522,14 +518,14 @@ impl SysrepoSession {
         let data = Box::into_raw(Box::new(callback));
         let rc = unsafe {
             sr_event_notif_subscribe(self.sess, mod_name, xpath, start_time, stop_time,
-                                     Some(SysrepoSession::call_event_notif::<F>),
+                                     Some(SrSession::call_event_notif::<F>),
                                      data as *mut _, opts, &mut subscr)
         };
 
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            let id = self.insert_subscription(SrSubscr::from(subscr));
             Ok(self.subscrs.get_mut(&id).unwrap())
         }
     }
@@ -543,13 +539,13 @@ impl SysrepoSession {
         timestamp: time_t,
         private_data: *mut c_void)
     where F: FnMut(u32, sr_ev_notif_type_t,
-                   &str, SysrepoValues, time_t),
+                   &str, SrValueSlice, time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let path: &CStr = CStr::from_ptr(path);
-        let sr_values = SysrepoValues::from(values as *mut sr_val_t, values_cnt, false);
+        let sr_values = SrValueSlice::from(values as *mut sr_val_t, values_cnt, false);
 
         callback(sr_session_get_id(sess), notif_type, path.to_str().unwrap(), sr_values, timestamp);
     }
@@ -557,8 +553,8 @@ impl SysrepoSession {
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
                             callback: F, _private_data: *mut c_void,
                             priority: u32, opts: sr_subscr_options_t)
-                            -> Result<&mut SysrepoSubscription, i32>
-    where F: FnMut(u32, &str, SysrepoValues, sr_event_t, u32) -> SysrepoValues + 'static,
+                            -> Result<&mut SrSubscr, i32>
+    where F: FnMut(u32, &str, SrValueSlice, sr_event_t, u32) -> SrValueSlice + 'static,
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -567,11 +563,11 @@ impl SysrepoSession {
             match xpath {
                 Some(xpath) => {
                     let xpath = &xpath[..] as *const _ as *mut i8;
-                    sr_rpc_subscribe(self.sess, xpath, Some(SysrepoSession::call_rpc::<F>),
+                    sr_rpc_subscribe(self.sess, xpath, Some(SrSession::call_rpc::<F>),
                                      data as *mut _, priority, opts, &mut subscr)
                 }
                 None => {
-                    sr_rpc_subscribe(self.sess, std::ptr::null_mut(), Some(SysrepoSession::call_rpc::<F>),
+                    sr_rpc_subscribe(self.sess, std::ptr::null_mut(), Some(SrSession::call_rpc::<F>),
                                      data as *mut _, priority, opts, &mut subscr)
                 }
             }
@@ -580,7 +576,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            let id = self.insert_subscription(SrSubscr::from(subscr));
             Ok(self.subscrs.get_mut(&id).unwrap())
         }
     }
@@ -595,14 +591,14 @@ impl SysrepoSession {
         output: *mut *mut sr_val_t,
         output_cnt: *mut u64,
         private_data: *mut c_void) -> i32
-    where F: FnMut(u32, &str, SysrepoValues,
-                   sr_event_t, u32) -> SysrepoValues
+    where F: FnMut(u32, &str, SrValueSlice,
+                   sr_event_t, u32) -> SrValueSlice
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let op_path: &CStr = CStr::from_ptr(op_path);
-        let inputs = SysrepoValues::from(input as *mut sr_val_t, input_cnt, false);
+        let inputs = SrValueSlice::from(input as *mut sr_val_t, input_cnt, false);
 
         let sr_output = callback(sr_session_get_id(sess), op_path.to_str().unwrap(), inputs, event, request_id);
         *output = sr_output.as_ptr();
@@ -613,7 +609,7 @@ impl SysrepoSession {
 
     pub fn oper_get_items_subscribe<F>(&mut self, mod_name: &str, path: &str,
                                        callback: F, opts: sr_subscr_options_t)
-                                       -> Result<&mut SysrepoSubscription, i32>
+                                       -> Result<&mut SrSubscr, i32>
     where F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode> + 'static,
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
@@ -626,7 +622,7 @@ impl SysrepoSession {
                 self.sess,
                 mod_name,
                 path,
-                Some(SysrepoSession::call_get_items::<F>),
+                Some(SrSession::call_get_items::<F>),
                 data as *mut _,
                 opts,
                 &mut subscr)
@@ -635,7 +631,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            let id = self.insert_subscription(SrSubscr::from(subscr));
             Ok(self.subscrs.get_mut(&id).unwrap())
         }
     }
@@ -682,7 +678,7 @@ impl SysrepoSession {
 
     pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
                                       callback: F, priority: u32, opts: sr_subscr_options_t)
-                                      -> Result<&mut SysrepoSubscription, i32>
+                                      -> Result<&mut SrSubscr, i32>
     where F: FnMut(u32, &str, &str, sr_event_t, u32) -> () + 'static
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
@@ -695,7 +691,7 @@ impl SysrepoSession {
                 self.sess,
                 mod_name,
                 path,
-                Some(SysrepoSession::call_module_change::<F>),
+                Some(SrSession::call_module_change::<F>),
                 data as *mut _,
                 priority,
                 opts,
@@ -705,7 +701,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let id = self.insert_subscription(SysrepoSubscription::from(subscr));
+            let id = self.insert_subscription(SrSubscr::from(subscr));
             Ok(self.subscrs.get_mut(&id).unwrap())
         }
     }
@@ -731,7 +727,7 @@ impl SysrepoSession {
         sr_error_e_SR_ERR_OK as i32
     }
 
-    pub fn get_changes_iter(&self, path: &str) -> Result<SysrepoChangeIter, i32> {
+    pub fn get_changes_iter(&self, path: &str) -> Result<SrChangeIter, i32> {
         let mut it = unsafe { zeroed::<*mut sr_change_iter_t>() };
         let rc = unsafe {
             let path = CString::new(path).unwrap();
@@ -743,7 +739,7 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(SysrepoChangeIter::from(it))
+            Ok(SrChangeIter::from(it))
         }
     }
 
@@ -759,7 +755,7 @@ impl SysrepoSession {
     }
 
     pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
-                    timeout: Option<Duration>) -> Result<SysrepoValues, i32> {
+                    timeout: Option<Duration>) -> Result<SrValueSlice, i32> {
         let path = &path[..] as *const _ as *mut i8;
         let (input, input_cnt) = match input {
             Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
@@ -778,12 +774,12 @@ impl SysrepoSession {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            Ok(SysrepoValues::from(output, output_count, true))
+            Ok(SrValueSlice::from(output, output_count, true))
         }
     }
 }
 
-impl Drop for SysrepoSession {
+impl Drop for SrSession {
     fn drop (&mut self) {
         self.subscrs.drain();
 
@@ -796,13 +792,13 @@ impl Drop for SysrepoSession {
 }
 
 /// Sysrepo Subscription.
-pub struct SysrepoSubscription {
+pub struct SrSubscr {
 
     /// Raw Pointer to subscription.
     subscr: *mut sr_subscription_ctx_t,
 }
 
-impl SysrepoSubscription {
+impl SrSubscr {
 
     pub fn new() -> Self {
         Self {
@@ -818,13 +814,13 @@ impl SysrepoSubscription {
 }
 
 /// Sysrepo Changes Iterator.
-pub struct SysrepoChangeIter {
+pub struct SrChangeIter {
 
     /// Raw pointer to iter.
     iter: *mut sr_change_iter_t,
 }
 
-impl SysrepoChangeIter {
+impl SrChangeIter {
 
     pub fn from(iter: *mut sr_change_iter_t) -> Self {
         Self {
@@ -833,7 +829,7 @@ impl SysrepoChangeIter {
     }
 }
 
-impl Drop for SysrepoChangeIter {
+impl Drop for SrChangeIter {
     fn drop (&mut self) {
         unsafe {
             sr_free_change_iter(self.iter);
