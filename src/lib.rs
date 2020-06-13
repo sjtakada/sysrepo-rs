@@ -514,8 +514,7 @@ impl SrSession {
 
     pub fn event_notif_subscribe<F>(&mut self, mod_name: &str, xpath: Option<String>,
                                     start_time: Option<time_t>, stop_time: Option<time_t>,
-                                    callback: F, _private_data: *mut c_void,
-                                    opts: sr_subscr_options_t)
+                                    callback: F, opts: sr_subscr_options_t)
                                     -> Result<&mut SrSubscr, i32>
     where F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t) + 'static,
     {
@@ -553,7 +552,7 @@ impl SrSession {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
-        let path: &CStr = CStr::from_ptr(path);
+        let path = CStr::from_ptr(path).to_str().unwrap();
         let sr_values = SrValueSlice::from(values as *mut sr_val_t, values_cnt, false);
         let sess = SrSession::from(sess, false);
         let notif_type = match SrNotifType::try_from(notif_type) {
@@ -561,7 +560,7 @@ impl SrSession {
             Err(err) => panic!(err),
         };
 
-        callback(sess, notif_type, path.to_str().unwrap(), sr_values, timestamp);
+        callback(sess, notif_type, path, sr_values, timestamp);
     }
 
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
