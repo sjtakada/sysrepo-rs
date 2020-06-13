@@ -187,6 +187,7 @@ pub type SrSubscrId = *const sr_subscription_ctx_t;
 
 /// Single Sysrepo Value.
 pub struct SrValue {
+
     value: *mut sr_val_t,
 }
 
@@ -293,13 +294,28 @@ impl Drop for SrValueSlice {
     }
 }
 
+/// Set Log Stderr.
+pub fn log_stderr(log_level: SrLogLevel) {
+    unsafe {
+        sr_log_stderr(log_level as u32);
+    }
+}
+
+/// Set Log Syslog.
+pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
+    let app_name = &app_name[..] as *const _ as *const i8;
+    unsafe {
+        sr_log_syslog(app_name, log_level as u32);
+    }
+}
+
 /// Sysrepo connection.
 pub struct SrConn {
 
     /// Raw Pointer to Connection.
     conn: *mut sr_conn_ctx_t,
 
-    /// Map from sid.sr to SrSession.
+    /// Sessions.
     sessions: HashMap<SrSessionId, SrSession>,
 }
 
@@ -337,8 +353,8 @@ impl SrConn {
     }
 
     /// Add session to map.
-    pub fn remove_session(&mut self, id: SrSessionId) {
-        self.sessions.remove(&id);
+    pub fn remove_session(&mut self, id: &SrSessionId) {
+        self.sessions.remove(id);
     }
 
     /// Lookup session from map.
@@ -365,24 +381,10 @@ impl SrConn {
     pub fn get_context(&mut self) -> LibYangCtx {
         LibYangCtx::from(unsafe { sr_get_context(self.conn) })
     }
-
-    /// Set Log Stderr.
-    pub fn log_stderr(log_level: SrLogLevel) {
-        unsafe {
-            sr_log_stderr(log_level as u32);
-        }
-    }
-
-    /// Set Log Syslog.
-    pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
-        let app_name = &app_name[..] as *const _ as *const i8;
-        unsafe {
-            sr_log_syslog(app_name, log_level as u32);
-        }
-    }
 }
 
 impl Drop for SrConn {
+
     fn drop (&mut self) {
         self.sessions.drain();
         self.disconnect();
@@ -402,7 +404,6 @@ pub struct SrSession {
     subscrs: HashMap<SrSubscrId, SrSubscr>,
 }
 
-
 impl SrSession {
 
     pub fn new() -> Self {
@@ -421,7 +422,7 @@ impl SrSession {
         }
     }
 
-    /// Create weak clone.
+    /// Create unowned clone.
     pub fn clone(&self) -> Self {
         Self {
             sess: self.sess,
@@ -468,8 +469,8 @@ impl SrSession {
 
     pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
                         opts: u32) -> Result<(), i32> {
-        let path = &path[..] as *const _ as *const i8;
-        let value = &value[..] as *const _ as *const i8;
+        let path = path.as_ptr() as *const i8;
+        let value = value.as_ptr() as *const i8;
         let origin = match origin {
             Some(orig) => &orig[..] as *const _ as *const i8,
             None => std::ptr::null(),
@@ -776,10 +777,11 @@ impl SrSession {
 }
 
 impl Drop for SrSession {
-    fn drop (&mut self) {
-        self.subscrs.drain();
 
+    fn drop (&mut self) {
         if self.owned {
+            self.subscrs.drain();
+
             unsafe {
                 sr_session_stop(self.sess);
             }
@@ -812,6 +814,16 @@ impl SrSubscr {
         self.subscr
     }
 }
+
+impl Drop for SrSubscr {
+
+    fn drop (&mut self) {
+        unsafe {
+            sr_unsubscribe(self.subscr);
+        }
+    }
+}
+
 
 /// Sysrepo Changes Iterator.
 pub struct SrChangeIter {
