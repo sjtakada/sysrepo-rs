@@ -181,6 +181,10 @@ pub enum LydAnyDataValueType {
     Lybd = LYD_ANYDATA_VALUETYPE_LYD_ANYDATA_LYBD as isize,
 }
 
+/// Typedefs.
+pub type SrSessionId = *const sr_session_ctx_t;
+pub type SrSubscrId = *const sr_subscription_ctx_t;
+
 /// Single Sysrepo Value.
 pub struct SrValue {
     value: *mut sr_val_t,
@@ -204,7 +208,7 @@ impl Drop for SrValue {
     }
 }
 
-/// Sysrepo Value Slice.
+/// Slice of Sysrepo Value.
 ///  The size of slice cannot change.
 pub struct SrValueSlice {
 
@@ -296,7 +300,7 @@ pub struct SrConn {
     conn: *mut sr_conn_ctx_t,
 
     /// Map from sid.sr to SrSession.
-    sessions: HashMap<u32, SrSession>,
+    sessions: HashMap<SrSessionId, SrSession>,
 }
 
 impl SrConn {
@@ -328,17 +332,17 @@ impl SrConn {
     }
 
     /// Add session to map.
-    pub fn insert_session(&mut self, id: u32, sess: SrSession) {
+    pub fn insert_session(&mut self, id: SrSessionId, sess: SrSession) {
         self.sessions.insert(id, sess);
     }
 
     /// Add session to map.
-    pub fn remove_session(&mut self, id: u32) {
+    pub fn remove_session(&mut self, id: SrSessionId) {
         self.sessions.remove(&id);
     }
 
     /// Lookup session from map.
-    pub fn lookup_session(&mut self, id: &u32) -> Option<&mut SrSession> {
+    pub fn lookup_session(&mut self, id: &SrSessionId) -> Option<&mut SrSession> {
         self.sessions.get_mut(id)
     }
 
@@ -351,15 +355,13 @@ impl SrConn {
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
-            let id = unsafe {
-                sr_session_get_id(sess)
-            };
+            let id = sess;
             self.insert_session(id, SrSession::from(sess));
-            Ok(self.sessions.get_mut(&id).unwrap())
+            Ok(self.sessions.get_mut(&(id as SrSessionId)).unwrap())
         }
     }
 
-    // Get context.
+    /// Get context.
     pub fn get_context(&mut self) -> LibYangCtx {
         LibYangCtx::from(unsafe { sr_get_context(self.conn) })
     }
@@ -396,11 +398,8 @@ pub struct SrSession {
     /// Owned flag.
     owned: bool,
 
-    /// Incremental subscription ID.
-    id: usize,
-
     /// Map from raw pointer to subscription.
-    subscrs: HashMap<usize, SrSubscr>,
+    subscrs: HashMap<SrSubscrId, SrSubscr>,
 }
 
 
@@ -410,7 +409,6 @@ impl SrSession {
         Self {
             sess: std::ptr::null_mut(),
             owned: true,
-            id: 0,
             subscrs: HashMap::new(),
         }
     }
@@ -419,7 +417,6 @@ impl SrSession {
         Self {
             sess: sess,
             owned: true,
-            id: 0,
             subscrs: HashMap::new(),
         }
     }
@@ -429,7 +426,6 @@ impl SrSession {
         Self {
             sess: self.sess,
             owned: false,
-            id: 0,
             subscrs: HashMap::new(),
         }
     }
@@ -440,19 +436,19 @@ impl SrSession {
 //        }
 //    }
 
-    pub fn insert_subscription(&mut self, subscr: SrSubscr) -> usize {
-        self.id += 1;
-        self.subscrs.insert(self.id, subscr);
-        self.id
+    pub fn insert_subscription(&mut self, subscr: SrSubscr) -> SrSubscrId {
+        let id = subscr.id();
+        self.subscrs.insert(id, subscr);
+        id
     }
 
-    pub fn remove_subscription(&mut self, id: usize) {
-        self.subscrs.remove(&id);
-    }
+//    pub fn remove_subscription(&mut self, id: usize) {
+//        self.subscrs.remove(&id);
+//    }
 
-    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SrSubscr> {
-        self.subscrs.get_mut(&id)
-    }
+//    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SrSubscr> {
+//        self.subscrs.get_mut(&id)
+//    }
 
     pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SrValueSlice, i32> {
         let xpath = &xpath[..] as *const _ as *const i8;
@@ -810,6 +806,10 @@ impl SrSubscr {
         Self {
             subscr: subscr,
         }
+    }
+
+    pub fn id(&self) -> SrSubscrId {
+        self.subscr
     }
 }
 
