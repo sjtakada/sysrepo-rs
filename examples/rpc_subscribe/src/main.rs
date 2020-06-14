@@ -38,10 +38,10 @@ fn run() -> bool {
     println!(r#"Application will subscribe "{}" RPC."#, path);
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Warn);
+    log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
-    let mut sr = match Sysrepo::new(0) {
+    let mut sr = match SrConn::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };
@@ -53,31 +53,16 @@ fn run() -> bool {
     };
 
     // Callback function.
-    let f = |_id: u32, _op_path: &str, _inputs: SysrepoValues,
-             _event: sr_event_t, _request_id: u32| -> SysrepoValues
+    let f = |_sess: SrSession, _op_path: &str, _inputs: SrValueSlice,
+             _event: SrEvent, _request_id: u32| -> SrValueSlice
     {
-        let mut sr_output = SysrepoValues::new(1, false);
-        sr_output.set_int64_value(0, false, "/examples:oper/ret", -123456164);
-
-        /*
-        let xpath = CString::new("/examples:oper/ret2").unwrap();
-        let xpath_ptr = xpath.as_ptr();
-        unsafe {
-            let mut val: sr_val_t = std::mem::zeroed::<sr_val_t>();
-            val.xpath = libc::strdup(xpath_ptr);
-            val.type_ = sr_type_e_SR_INT64_T;
-            val.dflt = false;
-            val.data.int64_val = 123456789;
-
-            vec.push(val);
-        }
-        */
-
+        let mut sr_output = SrValueSlice::new(1, false);
+        sr_output.set_int64_value(0, false, "/examples:oper/ret", -123456);
         sr_output
     };
 
     // Subscribe for the RPC.
-    if let Err(_) = sess.rpc_subscribe(Some(path), f, std::ptr::null_mut(), 0, 0) {
+    if let Err(_) = sess.rpc_subscribe(Some(path), f, 0, 0) {
         return false;
     }
 

@@ -39,10 +39,10 @@ fn run() -> bool {
     println!(r#"Application will send RPC "{}" notification."#, path);
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Warn);
+    log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
-    let mut sr = match Sysrepo::new(0) {
+    let mut sr = match SrConn::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };

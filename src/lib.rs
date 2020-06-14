@@ -149,6 +149,22 @@ pub enum SrEvent {
     Rpc = sr_event_e_SR_EV_RPC as isize,
 }
 
+impl TryFrom<u32> for SrEvent {
+    type Error = &'static str;
+
+    fn try_from(t: u32) -> Result<Self, Self::Error> {
+        match t {
+            sr_event_e_SR_EV_UPDATE => Ok(SrEvent::Update),
+            sr_event_e_SR_EV_CHANGE => Ok(SrEvent::Change),
+            sr_event_e_SR_EV_DONE => Ok(SrEvent::Done),
+            sr_event_e_SR_EV_ABORT => Ok(SrEvent::Abort),
+            sr_event_e_SR_EV_ENABLED => Ok(SrEvent::Enabled),
+            sr_event_e_SR_EV_RPC => Ok(SrEvent::Rpc),
+            _ => Err("Invalid SrEvent"),
+        }
+    }
+}
+
 /// Change Oper.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrChangeOper {
@@ -564,10 +580,9 @@ impl SrSession {
     }
 
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
-                            callback: F, _private_data: *mut c_void,
-                            priority: u32, opts: sr_subscr_options_t)
+                            callback: F, priority: u32, opts: sr_subscr_options_t)
                             -> Result<&mut SrSubscr, i32>
-    where F: FnMut(u32, &str, SrValueSlice, sr_event_t, u32) -> SrValueSlice + 'static,
+    where F: FnMut(SrSession, &str, SrValueSlice, SrEvent, u32) -> SrValueSlice + 'static,
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -575,7 +590,7 @@ impl SrSession {
         let rc = unsafe {
             match xpath {
                 Some(xpath) => {
-                    let xpath = &xpath[..] as *const _ as *mut i8;
+                    let xpath = xpath.as_ptr() as *mut i8;
                     sr_rpc_subscribe(self.sess, xpath, Some(SrSession::call_rpc::<F>),
                                      data as *mut _, priority, opts, &mut subscr)
                 }
@@ -604,16 +619,21 @@ impl SrSession {
         output: *mut *mut sr_val_t,
         output_cnt: *mut u64,
         private_data: *mut c_void) -> i32
-    where F: FnMut(u32, &str, SrValueSlice,
-                   sr_event_t, u32) -> SrValueSlice
+    where F: FnMut(SrSession, &str, SrValueSlice,
+                   SrEvent, u32) -> SrValueSlice
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
-        let op_path: &CStr = CStr::from_ptr(op_path);
+        let op_path = CStr::from_ptr(op_path).to_str().unwrap();
         let inputs = SrValueSlice::from(input as *mut sr_val_t, input_cnt, false);
+        let sess = SrSession::from(sess, false);
+        let event = match SrEvent::try_from(event) {
+            Ok(event) => event,
+            Err(err) => panic!(err),
+        };
 
-        let sr_output = callback(sr_session_get_id(sess), op_path.to_str().unwrap(), inputs, event, request_id);
+        let sr_output = callback(sess, op_path, inputs, event, request_id);
         *output = sr_output.as_ptr();
         *output_cnt = sr_output.len();
 
