@@ -4,8 +4,6 @@
 //
 
 use std::env;
-use std::mem::zeroed;
-use std::slice;
 
 use sysrepo::*;
 use utils::print_val;
@@ -17,36 +15,40 @@ fn print_help(program: &str) {
 
 /// Main.
 fn main() {
+    if run() {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn run() -> bool {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
     if args.len() != 2 && args.len() != 3 {
         print_help(&program);
-        std::process::exit(1);
+        return false;
     }
 
-    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
-    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut rc;
-
     let xpath = args[1].clone();
-    let mut ds = sr_datastore_e_SR_DS_RUNNING;
+    let mut ds = SrDatastore::Running;
 
     if args.len() == 3 {
         if args[2] == "running" {
-            ds = sr_datastore_e_SR_DS_RUNNING;
+            ds = SrDatastore::Running;
         } else if args[2] == "operational" {
-            ds = sr_datastore_e_SR_DS_OPERATIONAL;
+            ds = SrDatastore::Operational;
         } else {
             println!("Invalid datastore {}.", args[2]);
-            std::process::exit(1);
+            return false;
         }
     }
 
     println!(
         r#"Application will get "{}" from "{}" datastore."#,
         xpath,
-        if ds == sr_datastore_e_SR_DS_RUNNING {
+        if ds == SrDatastore::Running {
             "running"
         } else {
             "operational"
@@ -54,59 +56,29 @@ fn main() {
     );
 
     // Turn logging on.
-    unsafe {
-        sr_log_stderr(sr_log_level_t_SR_LL_WRN);
-    }
+    log_stderr(SrLogLevel::Warn);
 
-    loop {
-        // Connect to sysrepo.
-        unsafe {
-            rc = sr_connect(0, &mut conn);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
+    // Connect to sysrepo.
+    let mut sr = match SrConn::new(0) {
+        Ok(sr) => sr,
+        Err(_) => return false,
+    };
+
+    // Start session.
+    let sess = match sr.start_session(ds) {
+        Ok(sess) => sess,
+        Err(_) => return false,
+    };
+
+    // Get the values.
+    match sess.get_items(&xpath, None, 0) {
+        Err(_) => return false,
+        Ok(mut values) => {
+            for v in values.as_slice() {
+                print_val(&v);
             }
         }
-
-        // Start session.
-        unsafe {
-            rc = sr_session_start(conn, ds, &mut session);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        let mut val_count: u64 = 0;
-        let mut vals: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
-
-        // Get the values.
-        unsafe {
-            let xpath = &xpath[..] as *const _ as *const i8;
-
-            rc = sr_get_items(session, xpath, 0, 0, &mut vals, &mut val_count);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        // Print the values.
-        unsafe {
-            let vals: &[sr_val_t] = slice::from_raw_parts(vals, val_count as usize);
-
-            for i in 0..vals.len() {
-                print_val(&vals[i]);
-            }
-        }
-
-        break;
     }
 
-    unsafe {
-        sr_disconnect(conn);
-    }
-
-    if rc == 0 {
-        std::process::exit(0);
-    } else {
-        std::process::exit(1);
-    }
+    true
 }

@@ -14,6 +14,9 @@ build = "build.rs"
 [build-dependencies]
 bindgen = "0.54.0"
 
+[dependencies]
+libc = "0.2.70"
+
 [workspace]
 members = ["examples/utils", "examples/oper_data",
            "examples/notif_subscribe", "examples/notif_send",

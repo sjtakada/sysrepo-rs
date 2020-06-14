@@ -4,8 +4,6 @@
 //
 
 use std::env;
-use std::ffi::c_void;
-use std::mem::zeroed;
 
 use sysrepo::*;
 
@@ -19,12 +17,20 @@ fn print_help(program: &str) {
 
 /// Main.
 fn main() {
+    if run() {
+        std::process::exit(0);
+    } else {
+        std::process::exit(1);
+    }
+}
+
+fn run() -> bool {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
 
     if args.len() < 2 || args.len() > 4 || args.len() == 3 {
         print_help(&program);
-        std::process::exit(1);
+        return false;
     }
 
     let path = args[1].clone();
@@ -34,86 +40,59 @@ fn main() {
         None
     };
 
-    let mut conn: *mut sr_conn_ctx_t = unsafe { zeroed::<*mut sr_conn_ctx_t>() };
-    let mut session: *mut sr_session_ctx_t = unsafe { zeroed::<*mut sr_session_ctx_t>() };
-    let mut rc;
-
     println!(
         r#"Application will send notification "{}" notification."#,
         path
     );
 
     // Turn logging on.
-    unsafe {
-        sr_log_stderr(sr_log_level_t_SR_LL_WRN);
+    log_stderr(SrLogLevel::Warn);
+
+    // Connect to sysrepo.
+    let mut sr = match SrConn::new(0) {
+        Ok(sr) => sr,
+        Err(_) => return false,
+    };
+
+    // Get Lib Yang Context from sysrepo connection.
+    let ly_ctx = sr.get_context();
+
+    // Start session.
+    let sess = match sr.start_session(SrDatastore::Running) {
+        Ok(sess) => sess,
+        Err(_) => return false,
+    };
+
+    // Create the notification.
+    let notif = match LibYang::lyd_new_path(None, Some(&ly_ctx), &path, None, 0) {
+        Some(notif) => notif,
+        None => {
+            println!(r#"Creating notification "{}" failed."#, path);
+            return false;
+        }
+    };
+
+    // Add the input value.
+    if let Some((path, value)) = node_path_val {
+        let value = LydValue::from_string(value);
+        match LibYang::lyd_new_path(Some(&notif), None, &path, Some(&value), 0) {
+            Some(_) => {}
+            None => {
+                notif.free_withsiblings();
+
+                println!(r#"Creating value "{}" failed."#, path);
+                return false;
+            }
+        }
     }
 
-    loop {
-        // Generic raw null pointer.
-        let null_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+    // Send the notification.
+    if let Err(_) = sess.event_notif_send_tree(&notif) {
+        notif.free_withsiblings();
 
-        // Connect to sysrepo.
-        let ctx;
-        unsafe {
-            rc = sr_connect(0, &mut conn);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-            ctx = sr_get_context(conn);
-        }
-
-        // Start session.
-        unsafe {
-            rc = sr_session_start(conn, sr_datastore_e_SR_DS_RUNNING, &mut session);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        // Create the notification.
-        let notif;
-        unsafe {
-            let path_ptr = &path[..] as *const _ as *const i8;
-            notif = lyd_new_path(null_ptr as *mut lyd_node, ctx, path_ptr, null_ptr, 0, 0);
-            if notif == null_ptr as *mut lyd_node {
-                println!(r#"Creating notification "{}" failed."#, path);
-                break;
-            }
-        }
-
-        // Add the input value.
-        unsafe {
-            if let Some((path, val)) = node_path_val {
-                let path_ptr = &path[..] as *const _ as *const i8;
-                let val_ptr = &val[..] as *const _ as *mut c_void;
-
-                let ret_node =
-                    lyd_new_path(notif, null_ptr as *mut ly_ctx, path_ptr, val_ptr, 0, 0);
-                if ret_node == null_ptr as *mut lyd_node {
-                    println!(r#"Creating value "{}" failed."#, path);
-                    break;
-                }
-            }
-        }
-
-        // Send the notification.
-        unsafe {
-            rc = sr_event_notif_send_tree(session, notif);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        break;
+        return false;
     }
 
-    unsafe {
-        sr_disconnect(conn);
-    }
-
-    if rc == 0 {
-        std::process::exit(0);
-    } else {
-        std::process::exit(1);
-    }
+    notif.free_withsiblings();
+    true
 }
