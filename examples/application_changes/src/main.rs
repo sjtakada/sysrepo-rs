@@ -20,30 +20,29 @@ fn print_help(program: &str) {
 }
 
 /// Print change.
-fn print_change(oper: sr_change_oper_t, old_val: SrValue, new_val: SrValue) {
+fn print_change(oper: SrChangeOper, old_val: SrValue, new_val: SrValue) {
     let old_val: &sr_val_t = unsafe { &*old_val.value() };
     let new_val: &sr_val_t = unsafe { &*new_val.value() };
 
     match oper {
-        sr_change_oper_e_SR_OP_CREATED => {
+        SrChangeOper::Created => {
             print!("CREATED: ");
             print_val(&new_val);
         }
-        sr_change_oper_e_SR_OP_DELETED => {
+        SrChangeOper::Deleted => {
             print!("DELETED: ");
             print_val(&old_val);
         }
-        sr_change_oper_e_SR_OP_MODIFIED => {
+        SrChangeOper::Modified => {
             print!("MODIFIED: ");
             print_val(&old_val);
             print!("to ");
             print_val(&new_val);
         }
-        sr_change_oper_e_SR_OP_MOVED => {
+        SrChangeOper::Moved => {
             let xpath = unsafe { CStr::from_ptr(new_val.xpath).to_str().unwrap() };
             println!("MOVED: {}", xpath);
         }
-        _ => {}
     }
 }
 
@@ -113,7 +112,7 @@ fn run() -> bool {
     println!("");
     print_current_config(&mut sess, &mod_name);
 
-    let f = |sess: SrSession, mod_name: &str, path: &str, event: SrEvent, _request_id: u32| -> ()
+    let f = |sess: SrSession, mod_name: &str, _path: &str, event: SrEvent, _request_id: u32| -> ()
     {
         let mut sess = sess;
         let path = "//.";
@@ -130,10 +129,6 @@ fn run() -> bool {
             event
         );
         println!("");
-
-        let oper: sr_change_oper_t;
-        let old_value: SrValue;
-        let new_value: SrValue;
 
         while let Some((oper, old_value, new_value)) = sess.get_change_next(&mut iter) {
             print_change(oper, old_value, new_value);

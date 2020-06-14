@@ -150,20 +150,6 @@ pub enum SrEvent {
     Rpc = sr_event_e_SR_EV_RPC as isize,
 }
 
-impl fmt::Display for SrEvent {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s =  match self {
-            SrEvent::Update => "Update",
-            SrEvent::Change => "Change",
-            SrEvent::Done => "Done",
-            SrEvent::Abort => "Abort",
-            SrEvent::Enabled => "Enabled",
-            SrEvent::Rpc => "RPC",
-        };
-        write!(f, "{}", s)
-    }
-}
-
 impl TryFrom<u32> for SrEvent {
     type Error = &'static str;
 
@@ -180,6 +166,20 @@ impl TryFrom<u32> for SrEvent {
     }
 }
 
+impl fmt::Display for SrEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s =  match self {
+            SrEvent::Update => "Update",
+            SrEvent::Change => "Change",
+            SrEvent::Done => "Done",
+            SrEvent::Abort => "Abort",
+            SrEvent::Enabled => "Enabled",
+            SrEvent::Rpc => "RPC",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// Change Oper.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrChangeOper {
@@ -189,10 +189,36 @@ pub enum SrChangeOper {
     Moved = sr_change_oper_e_SR_OP_MOVED as isize,
 }
 
+impl TryFrom<u32> for SrChangeOper {
+    type Error = &'static str;
+
+    fn try_from(t: u32) -> Result<Self, Self::Error> {
+        match t {
+            sr_change_oper_e_SR_OP_CREATED => Ok(SrChangeOper::Created),
+            sr_change_oper_e_SR_OP_MODIFIED => Ok(SrChangeOper::Modified),
+            sr_change_oper_e_SR_OP_DELETED => Ok(SrChangeOper::Deleted),
+            sr_change_oper_e_SR_OP_MOVED => Ok(SrChangeOper::Moved),
+            _ => Err("Invalid SrChangeOper"),
+        }
+    }
+}
+
+impl fmt::Display for SrChangeOper {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s =  match self {
+            SrChangeOper::Created => "Created",
+            SrChangeOper::Modified => "Modified",
+            SrChangeOper::Deleted => "Deleted",
+            SrChangeOper::Moved => "Moved",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// Notification Type.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SrNotifType {
-    Relative = sr_ev_notif_type_e_SR_EV_NOTIF_REALTIME as isize,
+    Realtime = sr_ev_notif_type_e_SR_EV_NOTIF_REALTIME as isize,
     Replay = sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY as isize,
     ReplayComplete = sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY_COMPLETE as isize,
     Stop = sr_ev_notif_type_e_SR_EV_NOTIF_STOP as isize,
@@ -203,10 +229,10 @@ impl TryFrom<u32> for SrNotifType {
 
     fn try_from(t: u32) -> Result<Self, Self::Error> {
         match t {
-            0 => Ok(SrNotifType::Relative),
-            1 => Ok(SrNotifType::Replay),
-            2 => Ok(SrNotifType::ReplayComplete),
-            3 => Ok(SrNotifType::Stop),
+            sr_ev_notif_type_e_SR_EV_NOTIF_REALTIME => Ok(SrNotifType::Realtime),
+            sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY => Ok(SrNotifType::Replay),
+            sr_ev_notif_type_e_SR_EV_NOTIF_REPLAY_COMPLETE => Ok(SrNotifType::ReplayComplete),
+            sr_ev_notif_type_e_SR_EV_NOTIF_STOP => Ok(SrNotifType::Stop),
             _ => Err("Invalid SrNotifType"),
         }
     }
@@ -827,7 +853,7 @@ impl SrSession {
     }
 
     /// Return oper, old_value, new_value with next iter.
-    pub fn get_change_next(&mut self, iter: &mut SrChangeIter) -> Option<(sr_change_oper_t, SrValue, SrValue)> {
+    pub fn get_change_next(&mut self, iter: &mut SrChangeIter) -> Option<(SrChangeOper, SrValue, SrValue)> {
         let mut oper: sr_change_oper_t = 0;
         let mut old_value: *mut sr_val_t = std::ptr::null_mut();
         let mut new_value: *mut sr_val_t = std::ptr::null_mut();
@@ -837,7 +863,10 @@ impl SrSession {
         };
 
         if rc == SrError::Ok as i32 {
-            Some((oper, SrValue::from(old_value), SrValue::from(new_value)))
+            match SrChangeOper::try_from(oper) {
+                Ok(oper) => Some((oper, SrValue::from(old_value), SrValue::from(new_value))),
+                Err(_) => None,
+            }
         } else {
             None
         }
