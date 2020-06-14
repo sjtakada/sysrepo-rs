@@ -5,11 +5,6 @@
 
 use std::env;
 use std::ffi::CStr;
-//use std::ffi::CString;
-//use std::mem::zeroed;
-//use std::os::raw::c_char;
-//use std::os::raw::c_void;
-//use std::slice;
 use std::thread;
 use std::time;
 
@@ -55,7 +50,7 @@ fn print_change(oper: sr_change_oper_t, old_val: SrValue, new_val: SrValue) {
 /// Print current config.
 fn print_current_config(sess: &mut SrSession, mod_name: &str) {
     let xpath = format!("/{}:*//.", mod_name);
-    let xpath = &xpath[..];// as *const _ as *const i8;
+    let xpath = &xpath[..];
 
     // Get the values.
     match sess.get_items(&xpath, None, 0) {
@@ -67,75 +62,6 @@ fn print_current_config(sess: &mut SrSession, mod_name: &str) {
         }
     }
 }
-
-/*
-/// Module change callback.
-extern "C" fn module_change_cb(
-    session: *mut sr_session_ctx_t,
-    module_name: *const c_char,
-    _xpath: *const c_char,
-    event: sr_event_t,
-    _request_id: u32,
-    _private_data: *mut c_void,
-) -> i32 {
-    let mut it: *mut sr_change_iter_t = unsafe { zeroed::<*mut sr_change_iter_t>() };
-    let mut old_value: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
-    let mut new_value: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
-    let mut oper: sr_change_oper_t = 0;
-
-    let rc;
-
-    println!("");
-    println!("");
-    println!(
-        " ========== EVENT {} CHANGES: ====================================",
-        event
-    );
-    println!("");
-
-    loop {
-        unsafe {
-            let path = CString::new("//.").unwrap();
-
-            rc = sr_get_changes_iter(session, path.as_ptr() as *const _ as *const i8, &mut it);
-            if rc != sr_error_e_SR_ERR_OK as i32 {
-                break;
-            }
-        }
-
-        unsafe {
-            while sr_get_change_next(session, it, &mut oper, &mut old_value, &mut new_value)
-                == sr_error_e_SR_ERR_OK as i32
-            {
-                print_change(oper, old_value, new_value);
-                sr_free_val(old_value);
-                sr_free_val(new_value);
-            }
-        }
-
-        println!("");
-        print!(" ========== END OF CHANGES =======================================");
-
-        if event == sr_event_e_SR_EV_DONE {
-            let module_name = unsafe { CStr::from_ptr(module_name) };
-
-            println!("");
-            println!("");
-            println!(" ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========");
-            println!("");
-            print_current_config(session, module_name.to_str().unwrap());
-        }
-
-        break;
-    }
-
-    unsafe {
-        sr_free_change_iter(it);
-    }
-
-    sr_error_e_SR_ERR_OK as i32
-}
-*/
 
 /// Main.
 fn main() {
