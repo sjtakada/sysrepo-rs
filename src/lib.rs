@@ -483,7 +483,8 @@ impl SrSession {
 //    }
 
     pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SrValueSlice, i32> {
-        let xpath = &xpath[..] as *const _ as *const i8;
+//        let xpath = &xpath[..] as *const _ as *const i8;
+        let xpath = xpath.as_ptr() as *const i8;
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
         let mut values_count: u64 = 0;
         let mut values: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
