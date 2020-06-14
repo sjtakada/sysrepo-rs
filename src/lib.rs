@@ -437,6 +437,7 @@ pub struct SrSession {
 
 impl SrSession {
 
+    /// Constructor.
     pub fn new() -> Self {
         Self {
             sess: std::ptr::null_mut(),
@@ -445,6 +446,7 @@ impl SrSession {
         }
     }
 
+    /// Constructor.
     pub fn from(sess: *mut sr_session_ctx_t, owned: bool) -> Self {
         Self {
             sess: sess,
@@ -462,28 +464,21 @@ impl SrSession {
         }
     }
 
-//    pub fn get_id(&self) -> u32 {
-//        unsafe {
-//            sr_session_get_id(self.sess)
-//        }
-//    }
-
+    /// Insert subscription.
     pub fn insert_subscription(&mut self, subscr: SrSubscr) -> SrSubscrId {
         let id = subscr.id();
         self.subscrs.insert(id, subscr);
         id
     }
 
-//    pub fn remove_subscription(&mut self, id: usize) {
-//        self.subscrs.remove(&id);
-//    }
+    /// Remove subscription.
+    pub fn remove_subscription(&mut self, subscr: &SrSubscr) {
+        let id = subscr.id();
+        self.subscrs.remove(&id);
+    }
 
-//    pub fn lookup_subscription(&mut self, id: &usize) -> Option<&mut SrSubscr> {
-//        self.subscrs.get_mut(&id)
-//    }
-
+    /// Get items from given Xpath, anre return result in Value slice.
     pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SrValueSlice, i32> {
-//        let xpath = &xpath[..] as *const _ as *const i8;
         let xpath = xpath.as_ptr() as *const i8;
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
         let mut values_count: u64 = 0;
@@ -499,6 +494,7 @@ impl SrSession {
         }
     }
 
+    /// Set string item to given Xpath.
     pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
                         opts: u32) -> Result<(), i32> {
         let path = path.as_ptr() as *const i8;
@@ -516,6 +512,7 @@ impl SrSession {
         }
     }
 
+    /// Apply changes for the session.
     pub fn apply_changes(&mut self, timeout: Option<Duration>, wait: bool) -> Result<(), i32> {
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
 
@@ -529,6 +526,7 @@ impl SrSession {
         }
     }
 
+    /// Subscribe event notification.
     pub fn event_notif_subscribe<F>(&mut self, mod_name: &str, xpath: Option<String>,
                                     start_time: Option<time_t>, stop_time: Option<time_t>,
                                     callback: F, opts: sr_subscr_options_t)
@@ -580,6 +578,7 @@ impl SrSession {
         callback(sess, notif_type, path, sr_values, timestamp);
     }
 
+    /// Subscribe RPC.
     pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
                             callback: F, priority: u32, opts: sr_subscr_options_t)
                             -> Result<&mut SrSubscr, i32>
@@ -641,6 +640,7 @@ impl SrSession {
         sr_error_e_SR_ERR_OK as i32
     }
 
+    /// Subscribe oper get items.
     pub fn oper_get_items_subscribe<F>(&mut self, mod_name: &str, path: &str,
                                        callback: F, opts: sr_subscr_options_t)
                                        -> Result<&mut SrSubscr, i32>
@@ -648,8 +648,8 @@ impl SrSession {
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
-        let mod_name = &mod_name[..] as *const _ as *mut i8;
-        let path = &path[..] as *const _ as *mut i8;
+        let mod_name = mod_name.as_ptr() as *mut i8;
+        let path = path.as_ptr() as *mut i8;
 
         let rc = unsafe {
             sr_oper_get_items_subscribe(
@@ -685,8 +685,8 @@ impl SrSession {
 
         let ctx = sr_get_context(sr_session_get_connection(sess));
 
-        let mod_name: &CStr = CStr::from_ptr(mod_name);
-        let path: &CStr = CStr::from_ptr(path);
+        let mod_name = CStr::from_ptr(mod_name).to_str().unwrap();
+        let path = CStr::from_ptr(path).to_str().unwrap();
         let request_xpath = if request_xpath == std::ptr::null_mut() {
             None
         } else {
@@ -694,11 +694,7 @@ impl SrSession {
         };
 
         let ctx = LibYangCtx::from(ctx);
-        let node = callback(&ctx,
-                            mod_name.to_str().unwrap(),
-                            path.to_str().unwrap(),
-                            request_xpath,
-                            request_id);
+        let node = callback(&ctx, mod_name, path, request_xpath, request_id);
 
         match node {
             Some(node) => {
@@ -710,15 +706,16 @@ impl SrSession {
         sr_error_e_SR_ERR_OK as i32
     }
 
+    /// Subscribe module change.
     pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
                                       callback: F, priority: u32, opts: sr_subscr_options_t)
                                       -> Result<&mut SrSubscr, i32>
-    where F: FnMut(u32, &str, &str, sr_event_t, u32) -> () + 'static
+    where F: FnMut(u32, &str, &str, SrEvent, u32) -> () + 'static
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
-        let mod_name = &mod_name[..] as *const _ as *mut i8;
-        let path = path.map_or(std::ptr::null_mut(), |path| &path[..] as *const _ as *mut i8);
+        let mod_name = mod_name.as_ptr() as *mut i8;
+        let path = path.map_or(std::ptr::null_mut(), |path| path.as_ptr() as *mut i8);
 
         let rc = unsafe {
             sr_module_change_subscribe(
@@ -747,20 +744,24 @@ impl SrSession {
         event: sr_event_t,
         request_id: u32,
         private_data: *mut c_void) -> i32
-    where F: FnMut(u32, &str, &str, sr_event_t, u32) -> ()
+    where F: FnMut(u32, &str, &str, SrEvent, u32) -> ()
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
-        let mod_name: &CStr = CStr::from_ptr(mod_name);
-        let path: &CStr = CStr::from_ptr(path);
+        let mod_name = CStr::from_ptr(mod_name).to_str().unwrap();
+        let path = CStr::from_ptr(path).to_str().unwrap();
+        let event = match SrEvent::try_from(event) {
+            Ok(event) => event,
+            Err(err) => panic!(err),
+        };
 
-        callback(sr_session_get_id(sess), mod_name.to_str().unwrap(),
-                 path.to_str().unwrap(), event, request_id);
+        callback(sr_session_get_id(sess), mod_name, path, event, request_id);
 
         sr_error_e_SR_ERR_OK as i32
     }
 
+    /// Get changes iter.
     pub fn get_changes_iter(&self, path: &str) -> Result<SrChangeIter, i32> {
         let mut it = unsafe { zeroed::<*mut sr_change_iter_t>() };
         let rc = unsafe {
@@ -777,6 +778,7 @@ impl SrSession {
         }
     }
 
+    /// Send event notify tree.
     pub fn event_notif_send_tree(&mut self, notif: &LydNode) -> Result<(), i32> {
         let rc = unsafe {
             sr_event_notif_send_tree(self.sess, notif.get_node())
@@ -788,6 +790,7 @@ impl SrSession {
         }
     }
 
+    /// Send RPC.
     pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
                     timeout: Option<Duration>) -> Result<SrValueSlice, i32> {
         let path = &path[..] as *const _ as *mut i8;
