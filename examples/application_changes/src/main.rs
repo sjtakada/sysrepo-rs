@@ -112,7 +112,7 @@ fn run() -> bool {
     println!("");
     print_current_config(&mut sess, &mod_name);
 
-    let f = |sess: SrSession, mod_name: &str, _path: &str, event: SrEvent, _request_id: u32| -> ()
+    let f = |sess: SrSession, mod_name: &str, _path: Option<&str>, event: SrEvent, _request_id: u32| -> ()
     {
         let mut sess = sess;
         let path = "//.";
@@ -147,16 +147,18 @@ fn run() -> bool {
     };
 
     // Subscribe for changes in running config.
-    if args.len() == 3 {
+    let subscr = if args.len() == 3 {
         let xpath = args[2].clone();
-        if let Err(_) = sess.module_change_subscribe(&mod_name, Some(&xpath[..]), f, 0, 0) {
-            return false;
+        match sess.module_change_subscribe(&mod_name, Some(&xpath[..]), f, 0, 0) {
+            Err(_) => return false,
+            Ok(subscr) => subscr,
         }
     } else {
-        if let Err(_) = sess.module_change_subscribe(&mod_name, None, f, 0, 0) {
-            return false;
+        match sess.module_change_subscribe(&mod_name, None, f, 0, 0) {
+            Err(_) => return false,
+            Ok(subscr) => subscr,
         }
-    }
+    };
 
     println!("\n\n ========== LISTENING FOR CHANGES ==========\n");
 

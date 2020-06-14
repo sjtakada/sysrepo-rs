@@ -749,7 +749,7 @@ impl SrSession {
     pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
                                       callback: F, priority: u32, opts: sr_subscr_options_t)
                                       -> Result<&mut SrSubscr, i32>
-    where F: FnMut(SrSession, &str, &str, SrEvent, u32) -> () + 'static
+    where F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> () + 'static
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -783,13 +783,17 @@ impl SrSession {
         event: sr_event_t,
         request_id: u32,
         private_data: *mut c_void) -> i32
-    where F: FnMut(SrSession, &str, &str, SrEvent, u32) -> ()
+    where F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> ()
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let mod_name = CStr::from_ptr(mod_name).to_str().unwrap();
-        let path = CStr::from_ptr(path).to_str().unwrap();
+        let path = if path == std::ptr::null_mut() {
+            None
+        } else {
+            Some(CStr::from_ptr(path).to_str().unwrap())
+        };
         let event = SrEvent::try_from(event).expect("Convert error");
         let sess = SrSession::from(sess, false);
 
