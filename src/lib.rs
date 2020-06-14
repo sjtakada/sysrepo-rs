@@ -4,17 +4,17 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::ffi::CStr;
+use std::ffi::CString;
 use std::fmt;
-use std::slice;
 use std::mem;
 use std::mem::zeroed;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
+use std::slice;
 use std::time::Duration;
-use std::ffi::CStr;
-use std::ffi::CString;
-use std::collections::HashMap;
-use std::convert::TryFrom;
 
 use libc;
 
@@ -168,7 +168,7 @@ impl TryFrom<u32> for SrEvent {
 
 impl fmt::Display for SrEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s =  match self {
+        let s = match self {
             SrEvent::Update => "Update",
             SrEvent::Change => "Change",
             SrEvent::Done => "Done",
@@ -205,7 +205,7 @@ impl TryFrom<u32> for SrChangeOper {
 
 impl fmt::Display for SrChangeOper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s =  match self {
+        let s = match self {
             SrChangeOper::Created => "Created",
             SrChangeOper::Modified => "Modified",
             SrChangeOper::Deleted => "Deleted",
@@ -259,16 +259,12 @@ pub type SrSubscrId = *const sr_subscription_ctx_t;
 
 /// Single Sysrepo Value.
 pub struct SrValue {
-
     value: *mut sr_val_t,
 }
 
 impl SrValue {
-
     pub fn from(value: *mut sr_val_t) -> Self {
-        Self {
-            value: value
-        }
+        Self { value: value }
     }
 
     pub fn value(&self) -> *mut sr_val_t {
@@ -277,8 +273,7 @@ impl SrValue {
 }
 
 impl Drop for SrValue {
-
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         unsafe {
             sr_free_val(self.value);
         }
@@ -288,7 +283,6 @@ impl Drop for SrValue {
 /// Slice of Sysrepo Value.
 ///  The size of slice cannot change.
 pub struct SrValueSlice {
-
     /// Pointer to raw sr_val_t array.
     values: *mut sr_val_t,
 
@@ -300,7 +294,6 @@ pub struct SrValueSlice {
 }
 
 impl SrValueSlice {
-
     pub fn new(capacity: u64, owned: bool) -> Self {
         Self {
             values: unsafe {
@@ -320,17 +313,13 @@ impl SrValueSlice {
     }
 
     pub fn at_mut(&mut self, index: usize) -> &mut sr_val_t {
-        let slice = unsafe {
-            slice::from_raw_parts_mut(self.values, self.len as usize)
-        };
+        let slice = unsafe { slice::from_raw_parts_mut(self.values, self.len as usize) };
 
         &mut slice[index]
     }
 
     pub fn as_slice(&mut self) -> &[sr_val_t] {
-        unsafe {
-            slice::from_raw_parts(self.values, self.len as usize)
-        }
+        unsafe { slice::from_raw_parts(self.values, self.len as usize) }
     }
 
     pub fn as_ptr(&self) -> *mut sr_val_t {
@@ -360,8 +349,7 @@ impl SrValueSlice {
 }
 
 impl Drop for SrValueSlice {
-
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         if self.owned {
             unsafe {
                 sr_free_values(self.values, self.len);
@@ -387,7 +375,6 @@ pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
 
 /// Sysrepo connection.
 pub struct SrConn {
-
     /// Raw Pointer to Connection.
     conn: *mut sr_conn_ctx_t,
 
@@ -396,14 +383,11 @@ pub struct SrConn {
 }
 
 impl SrConn {
-
     /// Constructor.
     pub fn new(opts: sr_conn_options_t) -> Result<SrConn, i32> {
         let mut conn = std::ptr::null_mut();
 
-        let rc = unsafe {
-            sr_connect(opts, &mut conn)
-        };
+        let rc = unsafe { sr_connect(opts, &mut conn) };
 
         if rc != SrError::Ok as i32 {
             Err(rc)
@@ -441,9 +425,7 @@ impl SrConn {
     /// Start session.
     pub fn start_session(&mut self, ds: SrDatastore) -> Result<&mut SrSession, i32> {
         let mut sess = std::ptr::null_mut();
-        let rc = unsafe {
-            sr_session_start(self.conn, ds as u32, &mut sess)
-        };
+        let rc = unsafe { sr_session_start(self.conn, ds as u32, &mut sess) };
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
@@ -460,8 +442,7 @@ impl SrConn {
 }
 
 impl Drop for SrConn {
-
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         self.sessions.drain();
         self.disconnect();
     }
@@ -469,7 +450,6 @@ impl Drop for SrConn {
 
 /// Sysrepo session.
 pub struct SrSession {
-
     /// Raw Pointer to session.
     sess: *mut sr_session_ctx_t,
 
@@ -481,7 +461,6 @@ pub struct SrSession {
 }
 
 impl SrSession {
-
     /// Constructor.
     pub fn new() -> Self {
         Self {
@@ -523,14 +502,26 @@ impl SrSession {
     }
 
     /// Get items from given Xpath, anre return result in Value slice.
-    pub fn get_items(&mut self, xpath: &str, timeout: Option<Duration>, opts: u32) -> Result<SrValueSlice, i32> {
+    pub fn get_items(
+        &mut self,
+        xpath: &str,
+        timeout: Option<Duration>,
+        opts: u32,
+    ) -> Result<SrValueSlice, i32> {
         let xpath = xpath.as_ptr() as *const i8;
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
         let mut values_count: u64 = 0;
         let mut values: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
 
         let rc = unsafe {
-            sr_get_items(self.sess, xpath, timeout_ms, opts, &mut values, &mut values_count)
+            sr_get_items(
+                self.sess,
+                xpath,
+                timeout_ms,
+                opts,
+                &mut values,
+                &mut values_count,
+            )
         };
         if rc != SrError::Ok as i32 {
             Err(rc)
@@ -540,8 +531,13 @@ impl SrSession {
     }
 
     /// Set string item to given Xpath.
-    pub fn set_item_str(&mut self, path: &str, value: &str, origin: Option<&str>,
-                        opts: u32) -> Result<(), i32> {
+    pub fn set_item_str(
+        &mut self,
+        path: &str,
+        value: &str,
+        origin: Option<&str>,
+        opts: u32,
+    ) -> Result<(), i32> {
         let path = path.as_ptr() as *const i8;
         let value = value.as_ptr() as *const i8;
         let origin = match origin {
@@ -561,9 +557,7 @@ impl SrSession {
     pub fn apply_changes(&mut self, timeout: Option<Duration>, wait: bool) -> Result<(), i32> {
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
 
-        let rc = unsafe {
-            sr_apply_changes(self.sess, timeout_ms, if wait { 1 } else { 0 })
-        };
+        let rc = unsafe { sr_apply_changes(self.sess, timeout_ms, if wait { 1 } else { 0 }) };
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
@@ -572,23 +566,38 @@ impl SrSession {
     }
 
     /// Subscribe event notification.
-    pub fn event_notif_subscribe<F>(&mut self, mod_name: &str, xpath: Option<String>,
-                                    start_time: Option<time_t>, stop_time: Option<time_t>,
-                                    callback: F, opts: sr_subscr_options_t)
-                                    -> Result<&mut SrSubscr, i32>
-    where F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t) + 'static,
+    pub fn event_notif_subscribe<F>(
+        &mut self,
+        mod_name: &str,
+        xpath: Option<String>,
+        start_time: Option<time_t>,
+        stop_time: Option<time_t>,
+        callback: F,
+        opts: sr_subscr_options_t,
+    ) -> Result<&mut SrSubscr, i32>
+    where
+        F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t) + 'static,
     {
         let mod_name = mod_name.as_ptr() as *const i8;
         let xpath = xpath.map_or(std::ptr::null_mut(), |xpath| xpath.as_ptr() as *mut i8);
         let start_time = start_time.unwrap_or(0);
         let stop_time = stop_time.unwrap_or(0);
 
-        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let mut subscr: *mut sr_subscription_ctx_t =
+            unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
         let rc = unsafe {
-            sr_event_notif_subscribe(self.sess, mod_name, xpath, start_time, stop_time,
-                                     Some(SrSession::call_event_notif::<F>),
-                                     data as *mut _, opts, &mut subscr)
+            sr_event_notif_subscribe(
+                self.sess,
+                mod_name,
+                xpath,
+                start_time,
+                stop_time,
+                Some(SrSession::call_event_notif::<F>),
+                data as *mut _,
+                opts,
+                &mut subscr,
+            )
         };
 
         if rc != SrError::Ok as i32 {
@@ -606,8 +615,9 @@ impl SrSession {
         values: *const sr_val_t,
         values_cnt: size_t,
         timestamp: time_t,
-        private_data: *mut c_void)
-    where F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t),
+        private_data: *mut c_void,
+    ) where
+        F: FnMut(SrSession, SrNotifType, &str, SrValueSlice, time_t),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
@@ -621,25 +631,43 @@ impl SrSession {
     }
 
     /// Subscribe RPC.
-    pub fn rpc_subscribe<F>(&mut self, xpath: Option<String>,
-                            callback: F, priority: u32, opts: sr_subscr_options_t)
-                            -> Result<&mut SrSubscr, i32>
-    where F: FnMut(SrSession, &str, SrValueSlice, SrEvent, u32) -> SrValueSlice + 'static,
+    pub fn rpc_subscribe<F>(
+        &mut self,
+        xpath: Option<String>,
+        callback: F,
+        priority: u32,
+        opts: sr_subscr_options_t,
+    ) -> Result<&mut SrSubscr, i32>
+    where
+        F: FnMut(SrSession, &str, SrValueSlice, SrEvent, u32) -> SrValueSlice + 'static,
     {
-        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let mut subscr: *mut sr_subscription_ctx_t =
+            unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
 
         let rc = unsafe {
             match xpath {
                 Some(xpath) => {
                     let xpath = xpath.as_ptr() as *mut i8;
-                    sr_rpc_subscribe(self.sess, xpath, Some(SrSession::call_rpc::<F>),
-                                     data as *mut _, priority, opts, &mut subscr)
+                    sr_rpc_subscribe(
+                        self.sess,
+                        xpath,
+                        Some(SrSession::call_rpc::<F>),
+                        data as *mut _,
+                        priority,
+                        opts,
+                        &mut subscr,
+                    )
                 }
-                None => {
-                    sr_rpc_subscribe(self.sess, std::ptr::null_mut(), Some(SrSession::call_rpc::<F>),
-                                     data as *mut _, priority, opts, &mut subscr)
-                }
+                None => sr_rpc_subscribe(
+                    self.sess,
+                    std::ptr::null_mut(),
+                    Some(SrSession::call_rpc::<F>),
+                    data as *mut _,
+                    priority,
+                    opts,
+                    &mut subscr,
+                ),
             }
         };
 
@@ -660,9 +688,10 @@ impl SrSession {
         request_id: u32,
         output: *mut *mut sr_val_t,
         output_cnt: *mut u64,
-        private_data: *mut c_void) -> i32
-    where F: FnMut(SrSession, &str, SrValueSlice,
-                   SrEvent, u32) -> SrValueSlice
+        private_data: *mut c_void,
+    ) -> i32
+    where
+        F: FnMut(SrSession, &str, SrValueSlice, SrEvent, u32) -> SrValueSlice,
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
@@ -680,12 +709,18 @@ impl SrSession {
     }
 
     /// Subscribe oper get items.
-    pub fn oper_get_items_subscribe<F>(&mut self, mod_name: &str, path: &str,
-                                       callback: F, opts: sr_subscr_options_t)
-                                       -> Result<&mut SrSubscr, i32>
-    where F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode> + 'static,
+    pub fn oper_get_items_subscribe<F>(
+        &mut self,
+        mod_name: &str,
+        path: &str,
+        callback: F,
+        opts: sr_subscr_options_t,
+    ) -> Result<&mut SrSubscr, i32>
+    where
+        F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode> + 'static,
     {
-        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let mut subscr: *mut sr_subscription_ctx_t =
+            unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
         let mod_name = mod_name.as_ptr() as *mut i8;
         let path = path.as_ptr() as *mut i8;
@@ -698,7 +733,8 @@ impl SrSession {
                 Some(SrSession::call_get_items::<F>),
                 data as *mut _,
                 opts,
-                &mut subscr)
+                &mut subscr,
+            )
         };
 
         if rc != SrError::Ok as i32 {
@@ -716,8 +752,10 @@ impl SrSession {
         request_xpath: *const c_char,
         request_id: u32,
         parent: *mut *mut lyd_node,
-        private_data: *mut c_void) -> i32
-    where F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode>
+        private_data: *mut c_void,
+    ) -> i32
+    where
+        F: FnMut(&LibYangCtx, &str, &str, Option<&str>, u32) -> Option<LydNode>,
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
@@ -746,12 +784,19 @@ impl SrSession {
     }
 
     /// Subscribe module change.
-    pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
-                                      callback: F, priority: u32, opts: sr_subscr_options_t)
-                                      -> Result<&mut SrSubscr, i32>
-    where F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> () + 'static
+    pub fn module_change_subscribe<F>(
+        &mut self,
+        mod_name: &str,
+        path: Option<&str>,
+        callback: F,
+        priority: u32,
+        opts: sr_subscr_options_t,
+    ) -> Result<&mut SrSubscr, i32>
+    where
+        F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> () + 'static,
     {
-        let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
+        let mut subscr: *mut sr_subscription_ctx_t =
+            unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
         let mod_name = mod_name.as_ptr() as *mut i8;
         let path = path.map_or(std::ptr::null_mut(), |path| path.as_ptr() as *mut i8);
@@ -765,7 +810,8 @@ impl SrSession {
                 data as *mut _,
                 priority,
                 opts,
-                &mut subscr)
+                &mut subscr,
+            )
         };
 
         if rc != SrError::Ok as i32 {
@@ -782,8 +828,10 @@ impl SrSession {
         path: *const c_char,
         event: sr_event_t,
         request_id: u32,
-        private_data: *mut c_void) -> i32
-    where F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> ()
+        private_data: *mut c_void,
+    ) -> i32
+    where
+        F: FnMut(SrSession, &str, Option<&str>, SrEvent, u32) -> (),
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
@@ -821,9 +869,7 @@ impl SrSession {
 
     /// Send event notify tree.
     pub fn event_notif_send_tree(&mut self, notif: &LydNode) -> Result<(), i32> {
-        let rc = unsafe {
-            sr_event_notif_send_tree(self.sess, notif.get_node())
-        };
+        let rc = unsafe { sr_event_notif_send_tree(self.sess, notif.get_node()) };
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
@@ -832,12 +878,16 @@ impl SrSession {
     }
 
     /// Send RPC.
-    pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
-                    timeout: Option<Duration>) -> Result<SrValueSlice, i32> {
+    pub fn rpc_send(
+        &mut self,
+        path: &str,
+        input: Option<Vec<sr_val_t>>,
+        timeout: Option<Duration>,
+    ) -> Result<SrValueSlice, i32> {
         let path = path.as_ptr() as *mut i8;
         let (input, input_cnt) = match input {
             Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
-            None => (std::ptr::null_mut(), 0)
+            None => (std::ptr::null_mut(), 0),
         };
         let timeout = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
 
@@ -845,8 +895,15 @@ impl SrSession {
         let mut output_count: u64 = 0;
 
         let rc = unsafe {
-            sr_rpc_send(self.sess, path, input, input_cnt, timeout,
-                        &mut output, &mut output_count)
+            sr_rpc_send(
+                self.sess,
+                path,
+                input,
+                input_cnt,
+                timeout,
+                &mut output,
+                &mut output_count,
+            )
         };
 
         if rc != SrError::Ok as i32 {
@@ -857,13 +914,22 @@ impl SrSession {
     }
 
     /// Return oper, old_value, new_value with next iter.
-    pub fn get_change_next(&mut self, iter: &mut SrChangeIter) -> Option<(SrChangeOper, SrValue, SrValue)> {
+    pub fn get_change_next(
+        &mut self,
+        iter: &mut SrChangeIter,
+    ) -> Option<(SrChangeOper, SrValue, SrValue)> {
         let mut oper: sr_change_oper_t = 0;
         let mut old_value: *mut sr_val_t = std::ptr::null_mut();
         let mut new_value: *mut sr_val_t = std::ptr::null_mut();
 
         let rc = unsafe {
-            sr_get_change_next(self.sess, iter.iter(), &mut oper, &mut old_value, &mut new_value)
+            sr_get_change_next(
+                self.sess,
+                iter.iter(),
+                &mut oper,
+                &mut old_value,
+                &mut new_value,
+            )
         };
 
         if rc == SrError::Ok as i32 {
@@ -878,8 +944,7 @@ impl SrSession {
 }
 
 impl Drop for SrSession {
-
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         if self.owned {
             self.subscrs.drain();
 
@@ -892,13 +957,11 @@ impl Drop for SrSession {
 
 /// Sysrepo Subscription.
 pub struct SrSubscr {
-
     /// Raw Pointer to subscription.
     subscr: *mut sr_subscription_ctx_t,
 }
 
 impl SrSubscr {
-
     pub fn new() -> Self {
         Self {
             subscr: std::ptr::null_mut(),
@@ -906,9 +969,7 @@ impl SrSubscr {
     }
 
     pub fn from(subscr: *mut sr_subscription_ctx_t) -> Self {
-        Self {
-            subscr: subscr,
-        }
+        Self { subscr: subscr }
     }
 
     pub fn id(&self) -> SrSubscrId {
@@ -917,28 +978,22 @@ impl SrSubscr {
 }
 
 impl Drop for SrSubscr {
-
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         unsafe {
             sr_unsubscribe(self.subscr);
         }
     }
 }
 
-
 /// Sysrepo Changes Iterator.
 pub struct SrChangeIter {
-
     /// Raw pointer to iter.
     iter: *mut sr_change_iter_t,
 }
 
 impl SrChangeIter {
-
     pub fn from(iter: *mut sr_change_iter_t) -> Self {
-        Self {
-            iter: iter,
-        }
+        Self { iter: iter }
     }
 
     pub fn iter(&mut self) -> *mut sr_change_iter_t {
@@ -947,29 +1002,24 @@ impl SrChangeIter {
 }
 
 impl Drop for SrChangeIter {
-    fn drop (&mut self) {
+    fn drop(&mut self) {
         unsafe {
             sr_free_change_iter(self.iter);
         }
     }
 }
 
-
 /// Lib Yang Context.
 ///  It just holds raw pointer, but does not own the object.
 pub struct LibYangCtx {
-
     /// Raw Pointer to Lib Yang Context.
     ly_ctx: *const ly_ctx,
 }
 
 impl LibYangCtx {
-
     /// Constructo from raw pointer.
     pub fn from(ly_ctx: *const ly_ctx) -> Self {
-        Self {
-            ly_ctx: ly_ctx,
-        }
+        Self { ly_ctx: ly_ctx }
     }
 
     pub fn get_ctx(&self) -> *const ly_ctx {
@@ -979,7 +1029,6 @@ impl LibYangCtx {
 
 /// LibYang data node.
 pub struct LydNode {
-
     /// Raw pointer to LibYang data node.
     node: *mut lyd_node,
 
@@ -988,7 +1037,6 @@ pub struct LydNode {
 }
 
 impl LydNode {
-
     pub fn from(node: *mut lyd_node) -> Self {
         Self {
             node: node,
@@ -1009,7 +1057,6 @@ impl LydNode {
 
 /// LibYang data value.
 pub struct LydValue {
-
     value_type: LydAnyDataValueType,
 
     /// TBD: It is string for now.
@@ -1018,7 +1065,6 @@ pub struct LydValue {
 }
 
 impl LydValue {
-
     pub fn from_string(s: String) -> Self {
         Self {
             value_type: LydAnyDataValueType::ConstString,
@@ -1040,33 +1086,48 @@ impl LydValue {
 }
 
 /// Lib Yang Utilities.
-pub struct LibYang {
-
-}
+pub struct LibYang {}
 
 impl LibYang {
-
-    pub fn lyd_new_path(parent: Option<&LydNode>, ly_ctx: Option<&LibYangCtx>,
-                        path: &str, value: Option<&LydValue>, options: i32) -> Option<LydNode> {
-
+    pub fn lyd_new_path(
+        parent: Option<&LydNode>,
+        ly_ctx: Option<&LibYangCtx>,
+        path: &str,
+        value: Option<&LydValue>,
+        options: i32,
+    ) -> Option<LydNode> {
         let parent = parent.map_or(std::ptr::null_mut(), |parent| parent.get_node());
-        let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| ly_ctx.get_ctx() as *mut ly_ctx);
+        let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| {
+            ly_ctx.get_ctx() as *mut ly_ctx
+        });
         let path = CString::new(path).unwrap();
-        let path = path.as_ptr() as *const _ as * const i8;
+        let path = path.as_ptr() as *const _ as *const i8;
 
         match value {
             Some(value) => {
                 let node = unsafe {
-                    lyd_new_path(parent, ctx, path, value.get_value_raw(),
-                                 value.get_type() as u32, options)
+                    lyd_new_path(
+                        parent,
+                        ctx,
+                        path,
+                        value.get_value_raw(),
+                        value.get_type() as u32,
+                        options,
+                    )
                 };
 
                 Some(LydNode::from(node))
             }
             None => {
                 let node = unsafe {
-                    lyd_new_path(parent, ctx, path, std::ptr::null_mut(),
-                                 LydAnyDataValueType::ConstString as u32, options)
+                    lyd_new_path(
+                        parent,
+                        ctx,
+                        path,
+                        std::ptr::null_mut(),
+                        LydAnyDataValueType::ConstString as u32,
+                        options,
+                    )
                 };
 
                 Some(LydNode::from(node))
@@ -1075,5 +1136,3 @@ impl LibYang {
         // Value type fallbacks to ConstString, is it OK?
     }
 }
-
-

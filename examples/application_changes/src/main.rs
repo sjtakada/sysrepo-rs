@@ -53,7 +53,7 @@ fn print_current_config(sess: &mut SrSession, mod_name: &str) {
 
     // Get the values.
     match sess.get_items(&xpath, None, 0) {
-        Err(_) => { }
+        Err(_) => {}
         Ok(mut values) => {
             for v in values.as_slice() {
                 print_val(&v);
@@ -112,15 +112,18 @@ fn run() -> bool {
     println!("");
     print_current_config(&mut sess, &mod_name);
 
-    let f = |sess: SrSession, mod_name: &str, _path: Option<&str>, event: SrEvent, _request_id: u32| -> ()
-    {
+    let f = |sess: SrSession,
+             mod_name: &str,
+             _path: Option<&str>,
+             event: SrEvent,
+             _request_id: u32|
+     -> () {
         let mut sess = sess;
         let path = "//.";
         let mut iter = match sess.get_changes_iter(&path) {
             Ok(iter) => iter,
             Err(_) => return,
         };
-
 
         println!("");
         println!("");

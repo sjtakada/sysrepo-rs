@@ -54,10 +54,12 @@ fn run() -> bool {
     };
 
     // Callback
-    let f = |ctx: &LibYangCtx, mod_name: &str,
-             path: &str, _request_xpath: Option<&str>,
-             _request_id: u32| -> Option<LydNode>
-    {
+    let f = |ctx: &LibYangCtx,
+             mod_name: &str,
+             path: &str,
+             _request_xpath: Option<&str>,
+             _request_id: u32|
+     -> Option<LydNode> {
         println!("");
         println!("");
         println!(

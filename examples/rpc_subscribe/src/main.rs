@@ -53,9 +53,12 @@ fn run() -> bool {
     };
 
     // Callback function.
-    let f = |_sess: SrSession, _op_path: &str, _inputs: SrValueSlice,
-             _event: SrEvent, _request_id: u32| -> SrValueSlice
-    {
+    let f = |_sess: SrSession,
+             _op_path: &str,
+             _inputs: SrValueSlice,
+             _event: SrEvent,
+             _request_id: u32|
+     -> SrValueSlice {
         let mut sr_output = SrValueSlice::new(1, false);
         sr_output.set_int64_value(0, false, "/examples:oper/ret", -123456);
         sr_output

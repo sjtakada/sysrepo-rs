@@ -64,13 +64,16 @@ fn run() -> bool {
     };
 
     // Callback function.
-    let f = |_sess: SrSession, _notif_type: SrNotifType,
-             path: &str, mut values: SrValueSlice, _timestamp: time_t|
-    {
+    let f = |_sess: SrSession,
+             _notif_type: SrNotifType,
+             path: &str,
+             mut values: SrValueSlice,
+             _timestamp: time_t| {
         println!("");
         println!("");
         println!(
-            r#" ========== NOTIFICATION "{}" RECEIVED ======================="#, path
+            r#" ========== NOTIFICATION "{}" RECEIVED ======================="#,
+            path
         );
         println!("");
 

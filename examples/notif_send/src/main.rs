@@ -74,10 +74,9 @@ fn run() -> bool {
 
     // Add the input value.
     if let Some((path, value)) = node_path_val {
-
         let value = LydValue::from_string(value);
         match LibYang::lyd_new_path(Some(&notif), None, &path, Some(&value), 0) {
-            Some(_) => {},
+            Some(_) => {}
             None => {
                 notif.free_withsiblings();
 
