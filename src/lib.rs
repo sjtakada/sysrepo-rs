@@ -4,6 +4,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+use std::fmt;
 use std::slice;
 use std::mem;
 use std::mem::zeroed;
@@ -149,6 +150,20 @@ pub enum SrEvent {
     Rpc = sr_event_e_SR_EV_RPC as isize,
 }
 
+impl fmt::Display for SrEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s =  match self {
+            SrEvent::Update => "Update",
+            SrEvent::Change => "Change",
+            SrEvent::Done => "Done",
+            SrEvent::Abort => "Abort",
+            SrEvent::Enabled => "Enabled",
+            SrEvent::Rpc => "RPC",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 impl TryFrom<u32> for SrEvent {
     type Error = &'static str;
 
@@ -228,6 +243,10 @@ impl SrValue {
         Self {
             value: value
         }
+    }
+
+    pub fn value(&self) -> *mut sr_val_t {
+        self.value
     }
 }
 
@@ -334,7 +353,7 @@ pub fn log_stderr(log_level: SrLogLevel) {
 
 /// Set Log Syslog.
 pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
-    let app_name = &app_name[..] as *const _ as *const i8;
+    let app_name = app_name.as_ptr() as *const i8;
     unsafe {
         sr_log_syslog(app_name, log_level as u32);
     }
@@ -500,7 +519,7 @@ impl SrSession {
         let path = path.as_ptr() as *const i8;
         let value = value.as_ptr() as *const i8;
         let origin = match origin {
-            Some(orig) => &orig[..] as *const _ as *const i8,
+            Some(orig) => orig.as_ptr() as *const i8,
             None => std::ptr::null(),
         };
 
@@ -570,10 +589,7 @@ impl SrSession {
         let path = CStr::from_ptr(path).to_str().unwrap();
         let sr_values = SrValueSlice::from(values as *mut sr_val_t, values_cnt, false);
         let sess = SrSession::from(sess, false);
-        let notif_type = match SrNotifType::try_from(notif_type) {
-            Ok(notif_type) => notif_type,
-            Err(err) => panic!(err),
-        };
+        let notif_type = SrNotifType::try_from(notif_type).expect("Convert error");
 
         callback(sess, notif_type, path, sr_values, timestamp);
     }
@@ -628,10 +644,7 @@ impl SrSession {
         let op_path = CStr::from_ptr(op_path).to_str().unwrap();
         let inputs = SrValueSlice::from(input as *mut sr_val_t, input_cnt, false);
         let sess = SrSession::from(sess, false);
-        let event = match SrEvent::try_from(event) {
-            Ok(event) => event,
-            Err(err) => panic!(err),
-        };
+        let event = SrEvent::try_from(event).expect("Convert error");
 
         let sr_output = callback(sess, op_path, inputs, event, request_id);
         *output = sr_output.as_ptr();
@@ -710,7 +723,7 @@ impl SrSession {
     pub fn module_change_subscribe<F>(&mut self, mod_name: &str, path: Option<&str>,
                                       callback: F, priority: u32, opts: sr_subscr_options_t)
                                       -> Result<&mut SrSubscr, i32>
-    where F: FnMut(u32, &str, &str, SrEvent, u32) -> () + 'static
+    where F: FnMut(SrSession, &str, &str, SrEvent, u32) -> () + 'static
     {
         let mut subscr: *mut sr_subscription_ctx_t = unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
@@ -744,19 +757,17 @@ impl SrSession {
         event: sr_event_t,
         request_id: u32,
         private_data: *mut c_void) -> i32
-    where F: FnMut(u32, &str, &str, SrEvent, u32) -> ()
+    where F: FnMut(SrSession, &str, &str, SrEvent, u32) -> ()
     {
         let callback_ptr = private_data as *mut F;
         let callback = &mut *callback_ptr;
 
         let mod_name = CStr::from_ptr(mod_name).to_str().unwrap();
         let path = CStr::from_ptr(path).to_str().unwrap();
-        let event = match SrEvent::try_from(event) {
-            Ok(event) => event,
-            Err(err) => panic!(err),
-        };
+        let event = SrEvent::try_from(event).expect("Convert error");
+        let sess = SrSession::from(sess, false);
 
-        callback(sr_session_get_id(sess), mod_name, path, event, request_id);
+        callback(sess, mod_name, path, event, request_id);
 
         sr_error_e_SR_ERR_OK as i32
     }
@@ -793,7 +804,7 @@ impl SrSession {
     /// Send RPC.
     pub fn rpc_send(&mut self, path: &str, input: Option<Vec<sr_val_t>>,
                     timeout: Option<Duration>) -> Result<SrValueSlice, i32> {
-        let path = &path[..] as *const _ as *mut i8;
+        let path = path.as_ptr() as *mut i8;
         let (input, input_cnt) = match input {
             Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
             None => (std::ptr::null_mut(), 0)
@@ -812,6 +823,23 @@ impl SrSession {
             Err(rc)
         } else {
             Ok(SrValueSlice::from(output, output_count, true))
+        }
+    }
+
+    /// Return oper, old_value, new_value with next iter.
+    pub fn get_change_next(&mut self, iter: &mut SrChangeIter) -> Option<(sr_change_oper_t, SrValue, SrValue)> {
+        let mut oper: sr_change_oper_t = 0;
+        let mut old_value: *mut sr_val_t = std::ptr::null_mut();
+        let mut new_value: *mut sr_val_t = std::ptr::null_mut();
+
+        let rc = unsafe {
+            sr_get_change_next(self.sess, iter.iter(), &mut oper, &mut old_value, &mut new_value)
+        };
+
+        if rc == SrError::Ok as i32 {
+            Some((oper, SrValue::from(old_value), SrValue::from(new_value)))
+        } else {
+            None
         }
     }
 }
@@ -878,6 +906,10 @@ impl SrChangeIter {
         Self {
             iter: iter,
         }
+    }
+
+    pub fn iter(&mut self) -> *mut sr_change_iter_t {
+        self.iter
     }
 }
 

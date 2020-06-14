@@ -25,66 +25,47 @@ fn print_help(program: &str) {
 }
 
 /// Print change.
-fn print_change(op: sr_change_oper_t, old_val: *mut sr_val_t, new_val: *mut sr_val_t) {
-    unsafe {
-        let old_val: &sr_val_t = &*old_val;
-        let new_val: &sr_val_t = &*new_val;
+fn print_change(oper: sr_change_oper_t, old_val: SrValue, new_val: SrValue) {
+    let old_val: &sr_val_t = unsafe { &*old_val.value() };
+    let new_val: &sr_val_t = unsafe { &*new_val.value() };
 
-        match op {
-            sr_change_oper_e_SR_OP_CREATED => {
-                print!("CREATED: ");
-                print_val(new_val);
-            }
-            sr_change_oper_e_SR_OP_DELETED => {
-                print!("DELETED: ");
-                print_val(old_val);
-            }
-            sr_change_oper_e_SR_OP_MODIFIED => {
-                print!("MODIFIED: ");
-                print_val(old_val);
-                print!("to ");
-                print_val(new_val);
-            }
-            sr_change_oper_e_SR_OP_MOVED => {
-                let xpath = CStr::from_ptr(new_val.xpath);
-                println!("MOVED: {}", xpath.to_str().unwrap());
-            }
-            _ => {}
+    match oper {
+        sr_change_oper_e_SR_OP_CREATED => {
+            print!("CREATED: ");
+            print_val(&new_val);
         }
+        sr_change_oper_e_SR_OP_DELETED => {
+            print!("DELETED: ");
+            print_val(&old_val);
+        }
+        sr_change_oper_e_SR_OP_MODIFIED => {
+            print!("MODIFIED: ");
+            print_val(&old_val);
+            print!("to ");
+            print_val(&new_val);
+        }
+        sr_change_oper_e_SR_OP_MOVED => {
+            let xpath = unsafe { CStr::from_ptr(new_val.xpath).to_str().unwrap() };
+            println!("MOVED: {}", xpath);
+        }
+        _ => {}
     }
 }
 
 /// Print current config.
-fn print_current_config(sess: &mut SysrepoSession, mod_name: &str) {
+fn print_current_config(sess: &mut SrSession, mod_name: &str) {
     let xpath = format!("/{}:*//.", mod_name);
     let xpath = &xpath[..];// as *const _ as *const i8;
 
     // Get the values.
     match sess.get_items(&xpath, None, 0) {
-        Err(_) => {
-        }
+        Err(_) => { }
         Ok(mut values) => {
             for v in values.as_slice() {
                 print_val(&v);
             }
         }
     }
-/*
-    unsafe {
-        rc = sr_get_items(session, xpath, 0, 0, &mut values, &mut count);
-        if rc != sr_error_e_SR_ERR_OK as i32 {
-            return;
-        }
-    }
-
-    unsafe {
-        let vals: &[sr_val_t] = slice::from_raw_parts(values, count as usize);
-
-        for i in 0..vals.len() {
-            print_val(&vals[i]);
-        }
-    }
-*/
 }
 
 /*
@@ -142,7 +123,7 @@ extern "C" fn module_change_cb(
             println!("");
             println!(" ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========");
             println!("");
-//            print_current_config(session, module_name.to_str().unwrap());
+            print_current_config(session, module_name.to_str().unwrap());
         }
 
         break;
@@ -186,10 +167,10 @@ fn run() -> bool {
     );
 
     // Turn logging on.
-    Sysrepo::log_stderr(SrLogLevel::Warn);
+    log_stderr(SrLogLevel::Warn);
 
     // Connect to sysrepo.
-    let mut sr = match Sysrepo::new(0) {
+    let mut sr = match SrConn::new(0) {
         Ok(sr) => sr,
         Err(_) => return false,
     };
@@ -206,29 +187,54 @@ fn run() -> bool {
     println!("");
     print_current_config(&mut sess, &mod_name);
 
-
-    let xpath = args[2].clone();
-    let xpath = if args.len() == 3 {
-        Some(&xpath[..])
-    } else {
-        None
-    };
-
-    let sess_clone = sess.clone();
-
-    let f = move |_id: u32, mod_name: &str, path: &str, event: sr_event_t, _request_id: u32| -> ()
+    let f = |sess: SrSession, mod_name: &str, path: &str, event: SrEvent, _request_id: u32| -> ()
     {
+        let mut sess = sess;
         let path = "//.";
-
-        let it = match sess_clone.get_changes_iter(&path) {
+        let mut iter = match sess.get_changes_iter(&path) {
+            Ok(iter) => iter,
             Err(_) => return,
-            Ok(it) => it,
         };
+
+
+        println!("");
+        println!("");
+        println!(
+            " ========== EVENT {} CHANGES: ====================================",
+            event
+        );
+        println!("");
+
+        let oper: sr_change_oper_t;
+        let old_value: SrValue;
+        let new_value: SrValue;
+
+        while let Some((oper, old_value, new_value)) = sess.get_change_next(&mut iter) {
+            print_change(oper, old_value, new_value);
+        }
+
+        println!("");
+        print!(" ========== END OF CHANGES =======================================");
+
+        if event == SrEvent::Done {
+            println!("");
+            println!("");
+            println!(" ========== CONFIG HAS CHANGED, CURRENT RUNNING CONFIG: ==========");
+            println!("");
+            print_current_config(&mut sess, mod_name);
+        }
     };
 
     // Subscribe for changes in running config.
-    if let Err(_) = sess.module_change_subscribe(&mod_name, xpath, f, 0, 0) {
-        return false;
+    if args.len() == 3 {
+        let xpath = args[2].clone();
+        if let Err(_) = sess.module_change_subscribe(&mod_name, Some(&xpath[..]), f, 0, 0) {
+            return false;
+        }
+    } else {
+        if let Err(_) = sess.module_change_subscribe(&mod_name, None, f, 0, 0) {
+            return false;
+        }
     }
 
     println!("\n\n ========== LISTENING FOR CHANGES ==========\n");
