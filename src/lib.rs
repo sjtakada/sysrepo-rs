@@ -485,6 +485,11 @@ impl SrSession {
         }
     }
 
+    /// Get raw session context.
+    pub unsafe fn get_ctx(&self) -> *mut sr_session_ctx_t {
+        self.sess
+    }
+
     /// Insert subscription.
     pub fn insert_subscription(&mut self, subscr: SrSubscr) -> SrSubscrId {
         let id = subscr.id();
