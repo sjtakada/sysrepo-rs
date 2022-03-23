@@ -54,6 +54,7 @@ fn run() -> bool {
 
     // Callback function.
     let f = |_sess: SrSession,
+             _sub_id: u32,
              _op_path: &str,
              _inputs: SrValueSlice,
              _event: SrEvent,

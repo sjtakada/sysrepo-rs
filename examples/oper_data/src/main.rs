@@ -55,6 +55,7 @@ fn run() -> bool {
 
     // Callback
     let f = |ctx: &LibYangCtx,
+             sub_id: u32,
              mod_name: &str,
              path: &str,
              _request_xpath: Option<&str>,
@@ -63,8 +64,8 @@ fn run() -> bool {
         println!("");
         println!("");
         println!(
-            r#" ========== DATA FOR "{}" "{}" REQUESED ======================="#,
-            mod_name, path
+            r#" ========== DATA ({}) FOR "{}" "{}" REQUESED ======================="#,
+            sub_id, mod_name, path
         );
         println!("");
 
@@ -90,7 +91,7 @@ fn run() -> bool {
     };
 
     // Subscribe for the providing the operational data.
-    if let Err(_) = sess.oper_get_items_subscribe(&mod_name, &path, f, 0) {
+    if let Err(_) = sess.oper_get_subscribe(&mod_name, &path, f, 0) {
         return false;
     }
 

@@ -113,6 +113,7 @@ fn run() -> bool {
     print_current_config(&mut sess, &mod_name);
 
     let f = |sess: SrSession,
+             sub_id: u32,
              mod_name: &str,
              _path: Option<&str>,
              event: SrEvent,
@@ -128,7 +129,8 @@ fn run() -> bool {
         println!("");
         println!("");
         println!(
-            " ========== EVENT {} CHANGES: ====================================",
+            " ========== EVENT ({}) {} CHANGES: ====================================",
+            sub_id,
             event
         );
         println!("");
@@ -150,7 +152,7 @@ fn run() -> bool {
     };
 
     // Subscribe for changes in running config.
-    let subscr = if args.len() == 3 {
+    if args.len() == 3 {
         let xpath = args[2].clone();
         match sess.module_change_subscribe(&mod_name, Some(&xpath[..]), f, 0, 0) {
             Err(_) => return false,
