@@ -65,8 +65,8 @@ fn run() -> bool {
 
     // Create the notification.
     let notif = match LibYang::lyd_new_path(None, Some(&ly_ctx), &path, None, 0) {
-        Some(notif) => notif,
-        None => {
+        Ok(notif) => notif,
+        Err(_) => {
             println!(r#"Creating notification "{}" failed."#, path);
             return false;
         }
@@ -76,9 +76,9 @@ fn run() -> bool {
     if let Some((path, value)) = node_path_val {
         let value = LydValue::from_string(value);
         match LibYang::lyd_new_path(Some(&notif), None, &path, Some(&value), 0) {
-            Some(_) => {}
-            None => {
-                notif.free_withsiblings();
+            Ok(_) => {}
+            Err(_) => {
+                notif.free_all();
 
                 println!(r#"Creating value "{}" failed."#, path);
                 return false;
@@ -87,12 +87,12 @@ fn run() -> bool {
     }
 
     // Send the notification.
-    if let Err(_) = sess.event_notif_send_tree(&notif) {
-        notif.free_withsiblings();
+    if let Err(_) = sess.notif_send_tree(&notif, 0, 0) {
+        notif.free_all();
 
         return false;
     }
 
-    notif.free_withsiblings();
+    notif.free_all();
     true
 }

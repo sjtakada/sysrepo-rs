@@ -1,9 +1,9 @@
 [package]
-name = "rpc_send"
-version = "0.2.0"
 authors = ["Toshiaki Takada <toshi@reze.rs>"]
-edition = "2018"
+edition = "2021"
+name = "rpc_send"
+version = "0.3.0"
 
 [dependencies]
-sysrepo = { path = "../.." }
-utils = { path = "../utils" }
+sysrepo = {path = "../.."}
+utils = {path = "../utils"}

@@ -65,14 +65,16 @@ fn run() -> bool {
 
     // Callback function.
     let f = |_sess: SrSession,
+             sub_id: u32,
              _notif_type: SrNotifType,
              path: &str,
              mut values: SrValueSlice,
-             _timestamp: time_t| {
+             _timestamp: *mut timespec| {
         println!("");
         println!("");
         println!(
-            r#" ========== NOTIFICATION "{}" RECEIVED ======================="#,
+            r#" ========== NOTIFICATION ({}) "{}" RECEIVED ======================="#,
+            sub_id,
             path
         );
         println!("");
@@ -83,7 +85,7 @@ fn run() -> bool {
     };
 
     // Subscribe for the notifications.
-    if let Err(_) = sess.event_notif_subscribe(&mod_name, xpath, None, None, f, 0) {
+    if let Err(_) = sess.notif_subscribe(&mod_name, xpath, None, None, f, 0) {
         return false;
     }
 

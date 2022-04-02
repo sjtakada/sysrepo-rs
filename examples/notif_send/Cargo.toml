@@ -1,9 +1,11 @@
 [package]
+authors = [
+  "Toshiaki Takada <toshi@reze.rs>",
+  "Valentin Kivachuk Burda <foss@vk496.es>",
+]
+edition = "2021"
 name = "notif_send"
-version = "0.2.0"
-authors = ["Toshiaki Takada <toshi@reze.rs>"]
-edition = "2018"
+version = "0.3.0"
 
 [dependencies]
-sysrepo = { path = "../.." }
-
+sysrepo = {path = "../.."}
