@@ -331,8 +331,8 @@ impl SrValueSlice {
         self.owned = true;
     }
 
-    pub fn set_int64_value(&mut self, index: usize, dflt: bool, xpath: &str, value: i64) {
-        let xpath = CString::new(xpath).unwrap();
+    pub fn set_int64_value(&mut self, index: usize, dflt: bool, xpath: &str, value: i64) -> Result<(), i32> {
+        let xpath = str_to_cstring(&xpath)?;
         let xpath_ptr = xpath.as_ptr();
 
         let mut val = self.at_mut(index) as *mut sr_val_t;
@@ -342,6 +342,8 @@ impl SrValueSlice {
             (*val).dflt = if dflt { 0 } else { 1 }; //TODO: It is really those values?
             (*val).data.int64_val = value;
         }
+
+        Ok(())
     }
 }
 
@@ -363,11 +365,13 @@ pub fn log_stderr(log_level: SrLogLevel) {
 }
 
 /// Set Log Syslog.
-pub fn log_syslog(app_name: &str, log_level: SrLogLevel) {
-    let app_name = app_name.as_ptr() as *const i8;
+pub fn log_syslog(app_name: &str, log_level: SrLogLevel) -> Result<(), i32> {
+    let app_name = str_to_cstring(app_name)?;
     unsafe {
-        sr_log_syslog(app_name, log_level as u32);
+        sr_log_syslog(app_name.as_ptr(), log_level as u32);
     }
+
+    Ok(())
 }
 
 /// Sysrepo connection.
@@ -510,7 +514,7 @@ impl SrSession {
         timeout: Option<Duration>,
         opts: u32,
     ) -> Result<SrValueSlice, i32> {
-        let xpath = xpath.as_ptr() as *const i8;
+        let xpath = str_to_cstring(xpath)?;
         let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
         let mut values_count: u64 = 0;
         let mut values: *mut sr_val_t = unsafe { zeroed::<*mut sr_val_t>() };
@@ -518,7 +522,7 @@ impl SrSession {
         let rc = unsafe {
             sr_get_items(
                 self.sess,
-                xpath,
+                xpath.as_ptr(),
                 timeout_ms,
                 opts,
                 &mut values,
@@ -540,14 +544,15 @@ impl SrSession {
         origin: Option<&str>,
         opts: u32,
     ) -> Result<(), i32> {
-        let path = path.as_ptr() as *const i8;
-        let value = value.as_ptr() as *const i8;
+        let path = str_to_cstring(path)?;
+        let value = str_to_cstring(value)?;
         let origin = match origin {
-            Some(orig) => orig.as_ptr() as *const i8,
-            None => std::ptr::null(),
+            Some(orig) => Some(str_to_cstring(orig)?),
+            None => None,
         };
+        let origin_ptr = origin.map_or(std::ptr::null(), |orig| orig.as_ptr());
 
-        let rc = unsafe { sr_set_item_str(self.sess, path, value, origin, opts) };
+        let rc = unsafe { sr_set_item_str(self.sess, path.as_ptr(), value.as_ptr(), origin_ptr, opts) };
         if rc != SrError::Ok as i32 {
             Err(rc)
         } else {
@@ -580,8 +585,12 @@ impl SrSession {
     where
         F: FnMut(SrSession, u32, SrNotifType, &str, SrValueSlice, *mut timespec) + 'static,
     {
-        let mod_name = mod_name.as_ptr() as *const i8;
-        let xpath = xpath.map_or(std::ptr::null_mut(), |xpath| xpath.as_ptr() as *mut i8);
+        let mod_name = str_to_cstring(mod_name)?;
+        let xpath = match xpath {
+            Some(path) => Some(str_to_cstring(&path)?),
+            None => None,
+        };
+        let xpath_ptr = xpath.map_or(std::ptr::null(), |xpath| xpath.as_ptr());
         let start_time = start_time.unwrap_or(std::ptr::null_mut());
         let stop_time = stop_time.unwrap_or(std::ptr::null_mut());
 
@@ -591,8 +600,8 @@ impl SrSession {
         let rc = unsafe {
             sr_notif_subscribe(
                 self.sess,
-                mod_name,
-                xpath,
+                mod_name.as_ptr(),
+                xpath_ptr,
                 start_time,
                 stop_time,
                 Some(SrSession::call_event_notif::<F>),
@@ -651,10 +660,10 @@ impl SrSession {
         let rc = unsafe {
             match xpath {
                 Some(xpath) => {
-                    let xpath = xpath.as_ptr() as *mut i8;
+                    let xpath = str_to_cstring(&xpath)?;
                     sr_rpc_subscribe(
                         self.sess,
-                        xpath,
+                        xpath.as_ptr(),
                         Some(SrSession::call_rpc::<F>),
                         data as *mut _,
                         priority,
@@ -726,14 +735,14 @@ impl SrSession {
         let mut subscr: *mut sr_subscription_ctx_t =
             unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
-        let mod_name = mod_name.as_ptr() as *mut i8;
-        let path = path.as_ptr() as *mut i8;
+        let mod_name = str_to_cstring(mod_name)?;
+        let path = str_to_cstring(path)?;
 
         let rc = unsafe {
             sr_oper_get_subscribe(
                 self.sess,
-                mod_name,
-                path,
+                mod_name.as_ptr(),
+                path.as_ptr(),
                 Some(SrSession::call_get_items::<F>),
                 data as *mut _,
                 opts,
@@ -803,14 +812,18 @@ impl SrSession {
         let mut subscr: *mut sr_subscription_ctx_t =
             unsafe { zeroed::<*mut sr_subscription_ctx_t>() };
         let data = Box::into_raw(Box::new(callback));
-        let mod_name = mod_name.as_ptr() as *mut i8;
-        let path = path.map_or(std::ptr::null_mut(), |path| path.as_ptr() as *mut i8);
+        let mod_name = str_to_cstring(mod_name)?;
+        let path = match path {
+            Some(path) => Some(str_to_cstring(&path)?),
+            None => None,
+        };
+        let path_ptr = path.map_or(std::ptr::null(), |path| path.as_ptr());
 
         let rc = unsafe {
             sr_module_change_subscribe(
                 self.sess,
-                mod_name,
-                path,
+                mod_name.as_ptr(),
+                path_ptr,
                 Some(SrSession::call_module_change::<F>),
                 data as *mut _,
                 priority,
@@ -859,12 +872,9 @@ impl SrSession {
     /// Get changes iter.
     pub fn get_changes_iter(&self, path: &str) -> Result<SrChangeIter, i32> {
         let mut it = unsafe { zeroed::<*mut sr_change_iter_t>() };
-        let rc = unsafe {
-            let path = CString::new(path).unwrap();
-            let path = path.as_ptr() as *const i8;
 
-            sr_get_changes_iter(self.sess, path, &mut it)
-        };
+        let path = str_to_cstring(path)?;
+        let rc = unsafe { sr_get_changes_iter(self.sess, path.as_ptr(), &mut it) };
 
         if rc != SrError::Ok as i32 {
             Err(rc)
@@ -895,7 +905,7 @@ impl SrSession {
         input: Option<Vec<sr_val_t>>,
         timeout: Option<Duration>,
     ) -> Result<SrValueSlice, i32> {
-        let path = path.as_ptr() as *mut i8;
+        let path = str_to_cstring(path)?;
         let (input, input_cnt) = match input {
             Some(mut input) => (input.as_mut_ptr(), input.len() as u64),
             None => (std::ptr::null_mut(), 0),
@@ -908,7 +918,7 @@ impl SrSession {
         let rc = unsafe {
             sr_rpc_send(
                 self.sess,
-                path,
+                path.as_ptr(),
                 input,
                 input_cnt,
                 timeout,
@@ -1123,8 +1133,7 @@ impl LibYang {
         let ctx = ly_ctx.map_or(std::ptr::null_mut(), |ly_ctx| {
             ly_ctx.get_ctx() as *mut ly_ctx
         });
-        let path = CString::new(path).unwrap();
-        let path = path.as_ptr() as *const _ as *const i8;
+        let path = str_to_cstring(path)?;
         let mut node: *mut lyd_node = unsafe { zeroed::<*mut lyd_node>() };
 
 
@@ -1133,7 +1142,7 @@ impl LibYang {
             None => std::ptr::null_mut(),
         };
 
-        let rc = unsafe { lyd_new_path(parent, ctx, path, val, options, &mut node) };
+        let rc = unsafe { lyd_new_path(parent, ctx, path.as_ptr(), val, options, &mut node) };
 
         if rc != LY_ERR_LY_SUCCESS {
             Err(rc as i32) // FIXME: We should not cast like this
@@ -1142,3 +1151,8 @@ impl LibYang {
         }
     }
 }
+
+fn str_to_cstring(s: &str) -> Result<CString,i32> {
+    CString::new(s).map_err(|_| SrError::InvalArg as i32)
+}
+
