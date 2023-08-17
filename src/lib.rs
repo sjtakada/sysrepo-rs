@@ -15,8 +15,13 @@ use std::os::raw::c_char;
 use std::os::raw::c_void;
 use std::slice;
 use std::time::Duration;
+use std::sync::Arc;
 
 use libc;
+
+use yang2::data::DataTree;
+use yang2::utils::Binding;
+use yang2::context::Context;
 
 /// Error.
 #[derive(Copy, Clone)]
@@ -505,6 +510,54 @@ impl SrSession {
     pub fn remove_subscription(&mut self, subscr: &SrSubscr) {
         let id = subscr.id();
         self.subscrs.remove(&id);
+    }
+
+    /// Get tree from given XPath.
+    pub fn get_data(
+        &mut self,
+        context: &Arc<Context>,
+        xpath: &str,
+        max_depth: Option<u32>,
+        timeout: Option<Duration>,
+        opts: u32
+    ) -> Result<DataTree, i32> {
+        let xpath = str_to_cstring(xpath)?;
+        let max_depth = max_depth.unwrap_or(0);
+        let timeout_ms = timeout.map_or(0, |timeout| timeout.as_millis() as u32);
+
+        // SAFETY: data is used as output by sr_get_data and is not read
+        let mut data: *mut sr_data_t = unsafe { zeroed::<*mut sr_data_t>() };
+
+        let rc = unsafe {
+            sr_get_data(
+                self.sess,
+                xpath.as_ptr(),
+                max_depth,
+                timeout_ms,
+                opts,
+                &mut data,
+            )
+        };
+
+        if rc != SrError::Ok as i32 {
+            return Err(rc);
+        }
+
+        if data.is_null() {
+            return Err(SrError::NotFound as i32);
+        }
+
+        let conn = unsafe { sr_session_get_connection(self.sess) };
+
+        if unsafe {(*data).conn} != conn {
+            // It should never happen that the returned connection does not match the supplied one
+            // SAFETY: data was checked as not NULL just above
+            unsafe { sr_release_data(data); }
+
+            return Err(SrError::Internal as i32);
+        }
+
+        Ok(unsafe { DataTree::from_raw(context, (*data).tree) })
     }
 
     /// Get items from given Xpath, anre return result in Value slice.
