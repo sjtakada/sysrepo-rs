@@ -19,6 +19,9 @@ fn main() {
         // The input header we would like to generate
         // bindings for.
         .header("wrapper.h")
+        // lyd_node shall be provided by libyang2-sys
+        .blocklist_item("lyd_node")
+        .raw_line("use libyang2_sys::*;")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
