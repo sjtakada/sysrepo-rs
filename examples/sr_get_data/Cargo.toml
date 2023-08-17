@@ -1,0 +1,10 @@
+[package]
+authors = ["Toshiaki Takada <toshi@reze.rs>", "Florian Kauer <florian.kauer@linutronix.de>"]
+edition = "2021"
+name = "sr_get_data"
+version = "0.3.0"
+
+[dependencies]
+sysrepo = {path = "../.."}
+utils = {path = "../utils"}
+yang2 = "0.7"
