@@ -12,7 +12,7 @@ license = "Apache-2.0"
 name = "sysrepo"
 readme = "README.md"
 repository = "https://github.com/sjtakada/sysrepo-rs"
-version = "0.3.0"
+version = "0.4.0"
 
 [build-dependencies]
 bindgen = "0.59.2"
