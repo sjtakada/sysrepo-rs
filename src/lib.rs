@@ -603,7 +603,9 @@ impl SrSession {
             Some(orig) => Some(str_to_cstring(orig)?),
             None => None,
         };
-        let origin_ptr = origin.map_or(std::ptr::null(), |orig| orig.as_ptr());
+        let origin_ptr = origin
+            .as_deref()
+            .map_or(std::ptr::null(), |orig| orig.as_ptr());
 
         let rc = unsafe { sr_set_item_str(self.sess, path.as_ptr(), value.as_ptr(), origin_ptr, opts) };
         if rc != SrError::Ok as i32 {
@@ -643,7 +645,9 @@ impl SrSession {
             Some(path) => Some(str_to_cstring(&path)?),
             None => None,
         };
-        let xpath_ptr = xpath.map_or(std::ptr::null(), |xpath| xpath.as_ptr());
+        let xpath_ptr = xpath
+            .as_deref()
+            .map_or(std::ptr::null(), |xpath| xpath.as_ptr());
         let start_time = start_time.unwrap_or(std::ptr::null_mut());
         let stop_time = stop_time.unwrap_or(std::ptr::null_mut());
 
@@ -870,7 +874,9 @@ impl SrSession {
             Some(path) => Some(str_to_cstring(&path)?),
             None => None,
         };
-        let path_ptr = path.map_or(std::ptr::null(), |path| path.as_ptr());
+        let path_ptr = path
+            .as_deref()
+            .map_or(std::ptr::null(), |path| path.as_ptr());
 
         let rc = unsafe {
             sr_module_change_subscribe(
